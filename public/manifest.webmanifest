@@ -1,0 +1,12 @@
+{
+  "name": "BITS in Motion",
+  "short_name": "BITS Motion",
+  "description": "Your hostel-friendly fitness companion",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#07162f",
+  "icons": [
+    { "src": "/logo.png", "sizes": "any", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
