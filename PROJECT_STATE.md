@@ -18,6 +18,14 @@ The working tree was clean after this checkpoint before the AI context files wer
 
 Codex was actively modifying the existing application.
 
+### Tisha — Data and personalization update
+
+- **Exercise catalogue**: Added goal tags, minimum fitness level, equipment requirement and impact level to the client and database exercise data. Added `Low-impact marching` as the explicit substitute for jumping jacks when a student requests gentler movement.
+- **Recommendation rules**: Guest and signed-in plan generation now use goal, level, available time, equipment and low-impact preference. Plans retain warm-up/cooldown, select only compatible movements, and save the human-readable low-impact reason with the plan.
+- **Data persistence compatibility**: The exercise seed/upsert and restored-plan API now preserve the new metadata, so newly generated and reloaded plans have the same records. Existing databases receive the `impact` column through the setup migration.
+- **Team spreadsheet**: Created `outputs/personalization-data/exercise-data.xlsx`, a filterable 10-exercise catalogue for planning, camera support, progress/session data and leaderboard discussions. Its generator is `scripts/create-exercise-data-workbook.mjs`.
+- **Verification**: `npm test` passes (55 tests); `npm run build` passes. The spreadsheet was inspected and rendered for visual QA.
+
 The latest checkpoint contains substantial navigation/application-flow work.
 
 Files changed in the latest checkpoint include:
