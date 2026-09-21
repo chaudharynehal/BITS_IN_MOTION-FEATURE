@@ -6,7 +6,7 @@ import { createExerciseDetector, DETECTOR_CONFIGS } from '../vision/exerciseDete
 
 const INITIAL_FEEDBACK = { key: 'initial', message: 'Keep your full body visible and follow the setup guide', tone: 'neutral', priority: 0, until: 0 };
 
-export default function CoachScreen({ exerciseId = 'squats', onBack, onEndSession }) {
+export default function CoachScreen({ exerciseId = 'squats', onBack, onHome, onEndSession }) {
   const detectorConfig = DETECTOR_CONFIGS[exerciseId] || DETECTOR_CONFIGS.squats;
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -226,13 +226,21 @@ export default function CoachScreen({ exerciseId = 'squats', onBack, onEndSessio
     onBack();
   }
 
+  function handleHome() {
+    stopSessionCamera();
+    onHome();
+  }
+
   const canStart = modelStatus === 'ready' && ['idle', 'denied', 'unsupported', 'error'].includes(cameraStatus);
   const isRunning = cameraStatus === 'running';
 
   return (
     <main className="coach-page">
       <div className="coach-topbar">
-        <button className="icon-button icon-button-dark" onClick={handleBack} aria-label="Back to previous screen"><ArrowLeft size={21} /></button>
+        <div className="coach-navigation">
+          <button className="icon-button icon-button-dark" onClick={handleBack} aria-label="Back to previous screen"><ArrowLeft size={21} /></button>
+          <button className="coach-home-button" type="button" onClick={handleHome} aria-label="Go to BITS in Motion homepage"><img src="/logo.png" alt="" /><span>Home</span></button>
+        </div>
         <div><span className="eyebrow light">Live {detectorConfig.name}</span><small>Basic observable pose feedback</small></div>
         <button className="coach-reset" onClick={handleReset} disabled={!isRunning}><RotateCcw size={17} /> Reset</button>
       </div>

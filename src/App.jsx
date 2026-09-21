@@ -25,6 +25,7 @@ import {
 } from './utils/storage';
 import { buildWorkoutImpact } from './utils/workoutImpact';
 import { generateWorkoutPlan } from './utils/workoutRecommendation';
+import { APP_SCREENS, historyDepth, resolveRequestedScreen, screenFromHash } from './utils/navigation';
 
 const CoachScreen = lazy(() => import('./screens/CoachScreen'));
 
@@ -58,8 +59,6 @@ const JUDGE_PROFILE = {
   leaderboardName: 'Judge demo',
 };
 
-const APP_SCREENS = new Set(['dashboard', 'workouts', 'plan', 'coach', 'progress', 'leaderboard', 'profile']);
-
 function normalizeProfile(profile, user) {
   return {
     ...EMPTY_PROFILE,
@@ -85,14 +84,30 @@ function profileIsComplete(profile) {
 }
 
 function requestedScreen() {
-  const route = window.location.hash.replace(/^#\/?/, '');
-  return APP_SCREENS.has(route) ? route : null;
+  return screenFromHash(window.location.hash);
 }
 
 function updateLocation(screen, replace = false) {
   const url = new URL(window.location.href);
   url.hash = screen === 'welcome' ? '' : screen;
-  window.history[replace ? 'replaceState' : 'pushState']({}, '', url);
+  const currentDepth = historyDepth(window.history.state);
+  const currentScreen = requestedScreen() || 'welcome';
+  const shouldReplace = replace || currentScreen === screen;
+  const state = {
+    ...(window.history.state || {}),
+    bitsMotion: true,
+    bitsMotionDepth: shouldReplace ? currentDepth : currentDepth + 1,
+    bitsMotionScreen: screen,
+  };
+  window.history[shouldReplace ? 'replaceState' : 'pushState'](state, '', url);
+}
+
+function screenForCurrentLocation(profile, status) {
+  return resolveRequestedScreen({
+    requested: requestedScreen(),
+    activeAccount: ['signed-in', 'guest', 'demo'].includes(status),
+    profileComplete: profileIsComplete(profile),
+  });
 }
 
 function sessionPayload(result) {
@@ -114,6 +129,7 @@ function sessionPayload(result) {
 export default function App() {
   const [screen, setScreen] = useState('welcome');
   const [profile, setProfile] = useState(() => normalizeProfile(null));
+  const [profileDraft, setProfileDraft] = useState(null);
   const [plan, setPlan] = useState(null);
   const [planState, setPlanState] = useState('idle');
   const [planErrorAction, setPlanErrorAction] = useState('load');
@@ -133,12 +149,23 @@ export default function App() {
   });
   const accountRevision = useRef(0);
   const activeResultId = useRef(null);
+  const pendingProtectedScreen = useRef(null);
 
   const routeTo = useCallback((nextScreen, { replace = false } = {}) => {
     setScreen(nextScreen);
     updateLocation(nextScreen, replace);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
+
+  const goHome = useCallback(() => routeTo('welcome'), [routeTo]);
+
+  const goBack = useCallback(() => {
+    if (historyDepth(window.history.state) > 0) {
+      window.history.back();
+      return;
+    }
+    routeTo('welcome', { replace: true });
+  }, [routeTo]);
 
   const finishLaunch = useCallback(() => {
     try {
@@ -161,6 +188,8 @@ export default function App() {
     setGuestModeActive(false);
     setAuth({ status: error ? 'error' : 'visitor', user: null, accountSyncAvailable, error });
     setProfile(normalizeProfile(null));
+    setProfileDraft(null);
+    pendingProtectedScreen.current = null;
     setSessions([]);
     setProgressState('idle');
     setPlan(null);
@@ -180,6 +209,7 @@ export default function App() {
     }
     setAuth({ status: 'guest', user: null, accountSyncAvailable, error });
     setProfile(guestProfile);
+    setProfileDraft(null);
     setSessions(loadGuestSessions());
     setProgressState('ready');
     setPlan(guestPlan);
@@ -270,17 +300,17 @@ export default function App() {
         if (!accountSyncAvailable) {
           if (isGuestModeActive()) {
             const guest = activateGuestMode({ accountSyncAvailable: false });
-            routeTo(profileIsComplete(guest.profile) ? requestedScreen() || 'dashboard' : 'profile', { replace: true });
+            routeTo(screenForCurrentLocation(guest.profile, 'guest'), { replace: true });
           } else {
             activateVisitor({ accountSyncAvailable: false });
-            routeTo(requestedScreen() === 'leaderboard' ? 'leaderboard' : 'welcome', { replace: true });
+            routeTo(screenForCurrentLocation(null, 'visitor'), { replace: true });
           }
           return;
         }
 
         if (isGuestModeActive()) {
           const guest = activateGuestMode({ accountSyncAvailable: true });
-          routeTo(profileIsComplete(guest.profile) ? requestedScreen() || 'dashboard' : 'profile', { replace: true });
+          routeTo(screenForCurrentLocation(guest.profile, 'guest'), { replace: true });
           return;
         }
 
@@ -294,30 +324,30 @@ export default function App() {
           setAuth({ status: 'signed-in', user: account.user, accountSyncAvailable: true, error: '' });
           await loadSignedInResources(signedInRevision);
           if (!active || accountRevision.current !== signedInRevision) return;
-          routeTo(profileIsComplete(nextProfile) ? requestedScreen() || 'dashboard' : 'profile', { replace: true });
+          routeTo(screenForCurrentLocation(nextProfile, 'signed-in'), { replace: true });
         } catch (error) {
           if (!active || accountRevision.current !== revision) return;
           if (error.status === 401) {
             if (isGuestModeActive()) {
               const guest = activateGuestMode({ accountSyncAvailable: true });
-              routeTo(profileIsComplete(guest.profile) ? requestedScreen() || 'dashboard' : 'profile', { replace: true });
+              routeTo(screenForCurrentLocation(guest.profile, 'guest'), { replace: true });
             } else {
               activateVisitor({ accountSyncAvailable: true });
-              routeTo(requestedScreen() === 'leaderboard' ? 'leaderboard' : 'welcome', { replace: true });
+              routeTo(screenForCurrentLocation(null, 'visitor'), { replace: true });
             }
           } else {
             activateVisitor({ accountSyncAvailable: true, error: 'Account data could not load: ' + error.message });
-            routeTo(requestedScreen() === 'leaderboard' ? 'leaderboard' : 'welcome', { replace: true });
+            routeTo(screenForCurrentLocation(null, 'visitor'), { replace: true });
           }
         }
       } catch (error) {
         if (!active || accountRevision.current !== revision) return;
         if (isGuestModeActive()) {
           const guest = activateGuestMode({ accountSyncAvailable: false, error: 'Cloud account service is unavailable: ' + error.message });
-          routeTo(profileIsComplete(guest.profile) ? requestedScreen() || 'dashboard' : 'profile', { replace: true });
+          routeTo(screenForCurrentLocation(guest.profile, 'guest'), { replace: true });
         } else {
           activateVisitor({ accountSyncAvailable: false, error: 'Cloud account service is unavailable: ' + error.message });
-          routeTo(requestedScreen() === 'leaderboard' ? 'leaderboard' : 'welcome', { replace: true });
+          routeTo(screenForCurrentLocation(null, 'visitor'), { replace: true });
         }
       }
     })();
@@ -328,15 +358,15 @@ export default function App() {
   useEffect(() => {
     function handleHistory() {
       const requested = requestedScreen();
-      const activeAccount = ['signed-in', 'guest', 'demo'].includes(auth.status);
-      if (!activeAccount) {
-        setScreen(requested === 'leaderboard' ? 'leaderboard' : 'welcome');
-      } else if (!profileIsComplete(profile)) {
-        setScreen('profile');
-      } else {
-        setScreen(requested || 'dashboard');
-        if (requested === 'progress') void refreshSessions();
-      }
+      const resolved = resolveRequestedScreen({
+        requested,
+        activeAccount: ['signed-in', 'guest', 'demo'].includes(auth.status),
+        profileComplete: profileIsComplete(profile),
+      });
+      setScreen(resolved);
+      if (resolved !== (requested || 'welcome')) updateLocation(resolved, true);
+      if (resolved === 'progress') void refreshSessions();
+      window.scrollTo({ top: 0, behavior: 'instant' });
     }
     window.addEventListener('popstate', handleHistory);
     window.addEventListener('hashchange', handleHistory);
@@ -348,8 +378,16 @@ export default function App() {
 
   const navigate = useCallback((nextScreen) => {
     const activeAccount = ['signed-in', 'guest', 'demo'].includes(auth.status);
+    if (nextScreen === 'welcome') {
+      routeTo('welcome');
+      return;
+    }
+    if (nextScreen === 'leaderboard') {
+      routeTo('leaderboard');
+      return;
+    }
     if (!activeAccount) {
-      routeTo(nextScreen === 'leaderboard' ? 'leaderboard' : 'welcome');
+      routeTo('welcome');
       return;
     }
     if (!profileIsComplete(profile) && nextScreen !== 'profile') {
@@ -363,6 +401,13 @@ export default function App() {
   const handleContinueGuest = useCallback(() => {
     if (['signing-in', 'signing-out'].includes(auth.status)) return;
     const guest = activateGuestMode({ accountSyncAvailable: auth.accountSyncAvailable });
+    if (profileIsComplete(guest.profile) && pendingProtectedScreen.current === 'coach') {
+      pendingProtectedScreen.current = null;
+      setActiveExerciseId('squats');
+      setCoachReturnScreen('welcome');
+      routeTo('coach');
+      return;
+    }
     routeTo(profileIsComplete(guest.profile) ? 'dashboard' : 'profile');
   }, [activateGuestMode, auth.accountSyncAvailable, auth.status, routeTo]);
 
@@ -414,6 +459,7 @@ export default function App() {
     accountRevision.current = revision;
     setGuestModeActive(false);
     setProfile(normalizeProfile(null));
+    setProfileDraft(null);
     setSessions([]);
     setProgressState('loading');
     setPlan(null);
@@ -428,7 +474,15 @@ export default function App() {
       setProfile(nextProfile);
       setAuth({ status: 'signed-in', user: account.user, accountSyncAvailable: true, error: '' });
       await loadSignedInResources(revision);
-      if (accountRevision.current === revision) routeTo(profileIsComplete(nextProfile) ? 'dashboard' : 'profile');
+      if (accountRevision.current !== revision) return;
+      if (profileIsComplete(nextProfile) && pendingProtectedScreen.current === 'coach') {
+        pendingProtectedScreen.current = null;
+        setActiveExerciseId('squats');
+        setCoachReturnScreen('welcome');
+        routeTo('coach');
+      } else {
+        routeTo(profileIsComplete(nextProfile) ? 'dashboard' : 'profile');
+      }
     } catch (error) {
       if (accountRevision.current !== revision) return;
       activateVisitor({ accountSyncAvailable: true, error: error.message });
@@ -443,6 +497,8 @@ export default function App() {
     setGuestModeActive(false);
     setAuth((current) => ({ status: 'signing-out', user: null, accountSyncAvailable: current.accountSyncAvailable, error: '' }));
     setProfile(normalizeProfile(null));
+    setProfileDraft(null);
+    pendingProtectedScreen.current = null;
     setSessions([]);
     setProgressState('idle');
     setPlan(null);
@@ -469,9 +525,17 @@ export default function App() {
         throw new Error('This browser could not save your profile. Allow site storage and try again.');
       }
       setProfile(normalized);
+      setProfileDraft(null);
       setPlan(nextPlan);
       setPlanState('ready');
-      routeTo('plan');
+      if (pendingProtectedScreen.current === 'coach') {
+        pendingProtectedScreen.current = null;
+        setActiveExerciseId('squats');
+        setCoachReturnScreen('plan');
+        routeTo('coach');
+      } else {
+        routeTo('plan');
+      }
       return;
     }
 
@@ -486,10 +550,18 @@ export default function App() {
     if (accountRevision.current !== revision) return;
     if (saved.user) setAuth((current) => ({ ...current, user: saved.user, error: '' }));
     setProfile(normalizeProfile(saved.profile, saved.user));
+    setProfileDraft(null);
     setPlan(null);
     setPlanState('loading');
     setPlanErrorAction('generate');
-    routeTo('plan');
+    if (pendingProtectedScreen.current === 'coach') {
+      pendingProtectedScreen.current = null;
+      setActiveExerciseId('squats');
+      setCoachReturnScreen('plan');
+      routeTo('coach');
+    } else {
+      routeTo('plan');
+    }
 
     try {
       const savedPlan = await api.generatePlan();
@@ -572,6 +644,19 @@ export default function App() {
       return;
     }
     navigate(nextScreen);
+  }
+
+  function handleCameraGuided() {
+    pendingProtectedScreen.current = 'coach';
+    const activeAccount = ['signed-in', 'guest', 'demo'].includes(auth.status);
+    if (!activeAccount) return false;
+    if (!profileIsComplete(profile)) {
+      navigate('profile');
+      return true;
+    }
+    pendingProtectedScreen.current = null;
+    handleStartCoach('squats', 'welcome');
+    return true;
   }
 
   function handleEndSession(sessionMetrics) {
@@ -657,20 +742,21 @@ export default function App() {
   const hasProfile = profileIsComplete(profile);
   const persistenceMode = signedIn ? 'account' : demoMode ? 'demo' : 'guest';
   const displayName = profile.displayName || auth.user?.name || (demoMode ? 'Judge' : auth.status === 'guest' ? 'Guest' : '');
+  const showAppHeader = screen !== 'welcome' && screen !== 'coach';
   const showShellNavigation = appActive && hasProfile && !['welcome', 'coach'].includes(screen);
 
   return (
     <div className={'app ' + (screen === 'coach' ? 'app-coach ' : '') + (showShellNavigation ? 'app-with-nav' : '')}>
       {showLaunch && <LaunchScreen onComplete={finishLaunch} />}
       <div inert={showLaunch ? '' : undefined} aria-hidden={showLaunch || undefined}>
-      {showShellNavigation && <AppHeader screen={screen} onNavigate={handleNavigate} user={auth.user} status={auth.status} displayName={displayName} onSignOut={handleSignOut} onExitGuest={handleExitGuest} />}
+      {showAppHeader && <AppHeader screen={screen} showPrimaryNavigation={appActive && hasProfile} onBack={goBack} onHome={goHome} onNavigate={handleNavigate} user={auth.user} status={auth.status} displayName={displayName} onSignOut={handleSignOut} onExitGuest={handleExitGuest} />}
 
-      {screen === 'welcome' && <WelcomeScreen auth={auth} displayName={displayName} onGoogleCredential={handleGoogleCredential} onSignOut={handleSignOut} onExitGuest={handleExitGuest} onContinueGuest={handleContinueGuest} onContinue={() => navigate(hasProfile ? 'dashboard' : 'profile')} onJudgeDemo={startJudgeDemo} onProgress={() => navigate('progress')} onLeaderboard={() => navigate('leaderboard')} onNavigate={handleNavigate} />}
+      {screen === 'welcome' && <WelcomeScreen auth={auth} displayName={displayName} hasProfile={hasProfile} onGoogleCredential={handleGoogleCredential} onSignOut={handleSignOut} onExitGuest={handleExitGuest} onContinueGuest={handleContinueGuest} onContinue={() => navigate(hasProfile ? 'dashboard' : 'profile')} onCameraGuided={handleCameraGuided} onJudgeDemo={startJudgeDemo} onProgress={() => navigate('progress')} onLeaderboard={() => navigate('leaderboard')} onNavigate={handleNavigate} />}
       {screen === 'dashboard' && <DashboardScreen displayName={displayName} profile={profile} plan={plan} planState={planState} sessions={sessions} progressState={progressState} onRetryProgress={refreshSessions} onRetryPlan={handleRetryPlan} persistenceMode={persistenceMode} onNavigate={handleNavigate} onStartCoach={handleStartCoach} onCreatePlan={handleCreatePlan} />}
       {screen === 'workouts' && <WorkoutLibraryScreen onStartCoach={handleStartCoach} onNavigate={handleNavigate} />}
-      {screen === 'profile' && <ProfileScreen key={auth.status + '-' + (hasProfile ? 'edit' : 'new')} initialProfile={profile} signedIn={signedIn} demoMode={demoMode} accountName={auth.user?.name} hasExistingProfile={hasProfile} onSubmit={handleProfileSubmit} onBack={() => appActive && hasProfile ? navigate('dashboard') : routeTo('welcome')} />}
+      {screen === 'profile' && <ProfileScreen key={auth.status + '-' + (hasProfile ? 'edit' : 'new')} initialProfile={profileDraft || profile} signedIn={signedIn} demoMode={demoMode} accountName={auth.user?.name} hasExistingProfile={hasProfile} onDraftChange={setProfileDraft} onSubmit={handleProfileSubmit} onBack={() => appActive && hasProfile ? navigate('dashboard') : goBack()} />}
       {screen === 'plan' && <PlanScreen profile={profile} plan={plan} sessions={sessions} progressState={progressState} onRetryProgress={refreshSessions} planState={planState} planErrorAction={planErrorAction} onRetryPlan={handleRetryPlan} onStartCoach={handleStartCoach} onCreatePlan={handleCreatePlan} onExplore={() => navigate('dashboard')} onBack={() => navigate('dashboard')} />}
-      {screen === 'coach' && <Suspense fallback={<main className="screen-page"><p role="status">Loading your camera coach…</p><button className="button button-quiet" onClick={() => navigate(coachReturnScreen)}>Back to dashboard</button></main>}><CoachScreen exerciseId={activeExerciseId} onBack={() => navigate(coachReturnScreen)} onEndSession={handleEndSession} /></Suspense>}
+      {screen === 'coach' && <Suspense fallback={<main className="screen-page"><p role="status">Loading your camera coach…</p><button className="button button-quiet" onClick={goBack}>Back</button></main>}><CoachScreen exerciseId={activeExerciseId} onBack={goBack} onHome={goHome} onEndSession={handleEndSession} /></Suspense>}
       {screen === 'result' && result && <ResultScreen result={result} profile={profile} saveState={resultSaveState} automaticSave={signedIn} onSave={handleSaveResult} onHome={() => navigate('dashboard')} onProgress={() => navigate('progress')} onRetry={() => handleStartCoach(activeExerciseId, 'result')} />}
       {screen === 'progress' && <ProgressScreen sessions={sessions} loadState={progressState} persistenceMode={persistenceMode} onRetry={() => refreshSessions()} onHome={() => navigate('dashboard')} onStart={() => navigate('workouts')} />}
       {screen === 'leaderboard' && <LeaderboardScreen user={auth.user} accountSyncAvailable={auth.accountSyncAvailable} onHome={() => appActive ? navigate('dashboard') : routeTo('welcome')} />}

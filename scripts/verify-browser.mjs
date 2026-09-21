@@ -284,10 +284,41 @@ try {
     await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
   });
 
+  await record('Homepage CTAs scroll to real sections and onboarding', async () => {
+    await click('Features', '.marketing-nav button');
+    await ready(() => evaluate('Math.abs(document.querySelector(".student-benefits").getBoundingClientRect().top) < 2'));
+    await click('How it works', '.marketing-nav button');
+    await ready(() => evaluate('Math.abs(document.querySelector(".how-it-works").getBoundingClientRect().top) < 2'));
+    await evaluate('window.scrollTo(0, 0)');
+    await click('Explore features');
+    await ready(() => evaluate('Math.abs(document.querySelector(".student-benefits").getBoundingClientRect().top) < 2'));
+    await evaluate('window.scrollTo(0, 0)');
+    await click('Set up my fitness journey');
+    await ready(() => evaluate('document.querySelector(".auth-choice-card").getBoundingClientRect().top < innerHeight'));
+    await evaluate('window.scrollTo(0, 0)');
+    await click('Camera-guided movement');
+    await ready(() => evaluate('document.querySelector(".auth-choice-card").getBoundingClientRect().top < innerHeight'));
+    await reload();
+    await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
+  });
+
   let guestPlan;
-  await record('Required guest name, three-step setup, saved plan and do-later without progress', async () => {
+  await record('Guest onboarding supports browser Back/Forward, Home and draft restoration', async () => {
     await click('Continue as Guest');
     await route('profile');
+    await setFields({ displayName: 'Draft Guest' });
+    await evaluate('history.back()');
+    await ready(() => evaluate('location.hash === "" && Boolean(document.querySelector(".welcome-screen-v2"))'));
+    assert.equal(await evaluate('localStorage.getItem("bits-motion-guest-active-v1")'), '1');
+    await evaluate('history.forward()');
+    await route('profile');
+    assert.equal(await evaluate('document.querySelector("[name=displayName]").value'), 'Draft Guest');
+    await evaluate('document.querySelector(' + JSON.stringify('[aria-label="Go to BITS in Motion homepage"]') + ').click()');
+    await ready(() => evaluate('location.hash === "" && Boolean(document.querySelector(".welcome-screen-v2"))'));
+    await evaluate('history.back()');
+    await route('profile');
+    assert.equal(await evaluate('document.querySelector("[name=displayName]").value'), 'Draft Guest');
+    await setFields({ displayName: '' });
     await click('Continue');
     assert((await body()).includes('Enter a preferred name'));
     await completeProfile('Guest Example');
@@ -320,6 +351,13 @@ try {
     await evaluate('document.querySelector(' + JSON.stringify('[aria-label="Back to previous screen"]') + ').click()');
     await route('plan');
     assert.equal(await evaluate('JSON.parse(localStorage.getItem("bits-motion-sessions-v1") || "[]").length'), 0);
+    await evaluate('document.querySelector(' + JSON.stringify('[aria-label="Go to BITS in Motion homepage"]') + ').click()');
+    await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
+    await click('Camera-guided movement');
+    await route('coach');
+    await ready(() => evaluate('Boolean(document.querySelector(' + JSON.stringify('[aria-label="Go to BITS in Motion homepage"]') + '))'));
+    await evaluate('document.querySelector(' + JSON.stringify('[aria-label="Go to BITS in Motion homepage"]') + ').click()');
+    await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
     await openMenuAndClick('Sign in or exit guest');
     await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
     assert.equal(await evaluate('localStorage.getItem("bits-motion-plan-v1")'), guestPlan);

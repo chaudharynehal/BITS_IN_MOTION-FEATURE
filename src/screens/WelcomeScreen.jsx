@@ -52,11 +52,13 @@ function ProductVisual() {
 export default function WelcomeScreen({
   auth,
   displayName,
+  hasProfile,
   onGoogleCredential,
   onSignOut,
   onExitGuest,
   onContinueGuest,
   onContinue,
+  onCameraGuided,
   onJudgeDemo,
   onProgress,
   onLeaderboard,
@@ -70,6 +72,11 @@ export default function WelcomeScreen({
 
   function scrollTo(ref) {
     ref.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  }
+
+  function openCameraGuided() {
+    const opened = onCameraGuided?.();
+    if (!opened) scrollTo(authRef);
   }
 
   return (
@@ -99,12 +106,12 @@ export default function WelcomeScreen({
 
         <div className="marketing-hero-grid">
           <div className="marketing-copy">
-            <span className="status-pill dark"><Camera size={16} /> Camera-guided movement</span>
+            <button className="status-pill dark camera-guided-cta" type="button" onClick={openCameraGuided}><Camera size={16} /> Camera-guided movement</button>
             <h1>Your hostel-friendly fitness <em>companion</em></h1>
             <p>Build a practical plan for your space, then use privacy-first camera coaching for rep counting and observable pose feedback.</p>
             <div className="marketing-actions">
               <button className="button button-primary button-large" onClick={hasActiveAccount ? onContinue : () => scrollTo(authRef)}>
-                {hasActiveAccount ? 'Continue as ' + (displayName || 'Guest') : 'Set up my fitness journey'} <ArrowRight size={19} />
+                {hasActiveAccount ? hasProfile ? 'Continue as ' + (displayName || 'Guest') : 'Continue fitness setup' : 'Set up my fitness journey'} <ArrowRight size={19} />
               </button>
               <button className="button button-on-dark button-large" onClick={() => scrollTo(featuresRef)}><Sparkles size={18} /> Explore features</button>
             </div>
@@ -114,7 +121,7 @@ export default function WelcomeScreen({
                 <div className="returning-state">
                   <div className="returning-avatar"><UserRound size={22} /></div>
                   <div><span>{auth.status === 'signed-in' ? 'Synced account' : auth.status === 'demo' ? 'Judge demo' : 'Guest account'}</span><strong>Ready when you are, {displayName || 'Guest'}.</strong></div>
-                  <button className="button button-white" onClick={onContinue}>Open dashboard <ArrowRight size={17} /></button>
+                  <button className="button button-white" onClick={onContinue}>{hasProfile ? 'Open dashboard' : 'Continue setup'} <ArrowRight size={17} /></button>
                 </div>
               ) : (
                 <>

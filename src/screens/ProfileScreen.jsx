@@ -58,7 +58,7 @@ function SelectField({ label, name, value, onChange, options, error }) {
   );
 }
 
-export default function ProfileScreen({ initialProfile, signedIn, demoMode, accountName, hasExistingProfile, onSubmit, onBack }) {
+export default function ProfileScreen({ initialProfile, signedIn, demoMode, accountName, hasExistingProfile, onDraftChange, onSubmit, onBack }) {
   const [profile, setProfile] = useState(initialProfile);
   const [errors, setErrors] = useState({});
   const [step, setStep] = useState(0);
@@ -68,7 +68,9 @@ export default function ProfileScreen({ initialProfile, signedIn, demoMode, acco
 
   function handleChange(event) {
     const { name, value, type, checked } = event.target;
-    setProfile((current) => ({ ...current, [name]: type === 'checkbox' ? checked : value }));
+    const nextProfile = { ...profile, [name]: type === 'checkbox' ? checked : value };
+    setProfile(nextProfile);
+    onDraftChange?.(nextProfile);
     setErrors((current) => ({ ...current, [name]: undefined }));
   }
 
