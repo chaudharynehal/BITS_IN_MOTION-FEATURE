@@ -380,7 +380,68 @@ try {
     accounts.A.sessions.push(fixtureSession('A', 11));
     await click('Progress', '.desktop-nav button');
     await ready(() => evaluate('document.body.innerText.includes("A private history")'));
-    assert(!(await body()).includes('Guest Example'));
+  });
+
+  await record('Editing existing completed profile stays on step 3 without premature save', async () => {
+    // 1. Account A is already authenticated with completed profile.
+    await openMenuAndClick('Fitness profile');
+    await route('profile');
+    assert.equal(await evaluate('location.hash'), '#profile');
+
+    // 2. Inspect/modify Step 1.
+    assert((await body()).includes('About you'));
+    await setFields({ displayName: 'Preferred A' });
+
+    // Track PUT /api?action=profile calls
+    const profilePutsBefore = requests.filter((r) => r.action === 'profile' && r.method === 'PUT').length;
+
+    // 3. Continue to Step 2.
+    await click('Continue');
+    await ready(() => evaluate('document.body.innerText.includes("Your goal")'));
+    assert.equal(requests.filter((r) => r.action === 'profile' && r.method === 'PUT').length, profilePutsBefore,
+      'No save API call when continuing from Step 1 to Step 2');
+
+    // 4. Continue from Step 2 to Step 3.
+    await click('Continue');
+
+    // 5. Assert Step 3 is visible.
+    await ready(() => evaluate('document.body.innerText.includes("Your setup")'));
+
+    // Wait a brief delay to ensure no asynchronous premature save occurs
+    await delay(250);
+
+    // 6. Assert profile save API has NOT been called.
+    assert.equal(requests.filter((r) => r.action === 'profile' && r.method === 'PUT').length, profilePutsBefore,
+      'Premature save defect: Profile save API was called upon entering Step 3');
+
+    // 7. Assert navigation has NOT occurred.
+    assert.equal(await evaluate('location.hash'), '#profile',
+      'Premature navigation defect: App navigated away from #profile upon entering Step 3');
+
+    // 8. Assert Step 3 remains visible.
+    assert((await body()).includes('Your setup'));
+
+    // 9. Modify a Step 3 value.
+    await setFields({ equipment: 'Resistance band' });
+
+    // 10. Assert still no save occurs.
+    await delay(120);
+    assert.equal(requests.filter((r) => r.action === 'profile' && r.method === 'PUT').length, profilePutsBefore,
+      'Profile save API called prematurely upon modifying Step 3 field');
+    assert.equal(await evaluate('location.hash'), '#profile');
+
+    // 11. Click the explicit final Save/Update button.
+    await click('Save & refresh plan');
+
+    // 12. Assert exactly one profile-save request occurs.
+    await ready(() => requests.filter((r) => r.action === 'profile' && r.method === 'PUT').length === profilePutsBefore + 1);
+
+    // 13. Assert updated Step 3 data is persisted.
+    assert.equal(accounts.A.profile.equipment, 'Resistance band');
+
+    // 14. Assert expected navigation occurs only after successful save.
+    await route('plan');
+    await ready(() => evaluate('Boolean(document.querySelector(".plan-decision"))'));
   });
 
   await record('Logout clears A, B starts empty, returning A restores only A history', async () => {

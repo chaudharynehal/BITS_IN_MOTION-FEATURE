@@ -118,13 +118,20 @@ Preserve the exact Codex development state before Gemini temporarily continues d
 
 ### Gemini Work
 
-- **Task**: Stabilized the WIP navigation and browser verification suite from checkpoint `0ba436a`.
-- **Files Modified**:
-  - `scripts/verify-browser.mjs`: Replaced brittle `Math.abs(...) < 2` scroll assertions with realistic viewport visibility and scroll positioning checks (`.student-benefits` anchored near top at `top >= -24 && top < 32`; `.how-it-works` scrolled down and visible in viewport at `top >= 0 && top < innerHeight && window.scrollY > 200`).
-  - `src/screens/LeaderboardScreen.jsx`: Removed unused `onBack={onHome}` prop from `ScreenHeader` (which no longer accepts `onBack`).
-- **Verifications Performed**:
-  - `npm test`: 9 test suites, 51/51 passing.
-  - `npm run build`: Vite production build passed cleanly.
-  - `node scripts/verify-browser.mjs`: Complete end-to-end headless Chrome CDP test suite passed (17/17 checks, 0 JavaScript errors, all responsive screenshot and isolation checks green).
+- **Task 1**: Stabilized the WIP navigation and browser verification suite from checkpoint `0ba436a`.
+  - **Files Modified**: `scripts/verify-browser.mjs`, `src/screens/LeaderboardScreen.jsx`.
+  - **Verifications**: Vitest 51/51 passing, production build passing, browser suite 17/17 passing. Committed as `10d22b7`.
+- **Task 2**: Live Production Deployment Verification at commit `10d22b7`.
+  - Verified live deployment at `https://bits-in-motion-feature.vercel.app`.
+  - All 11 automated live CDP tests passed with 0 JS errors and 0 network failures.
+- **Task 3**: Profile Wizard Edit Mode Premature Save Defect Fix.
+  - **Root Cause**: In `src/screens/ProfileScreen.jsx`, the "Continue" button (`type="button"`) on Steps 1 and 2 and the final Save button (`type="submit"`) on Step 3 were conditionally rendered in the same JSX slot without `key` props. React reused the DOM element, mutating `button.type` to `'submit'` during native click event handling. The browser's default click action saw `button.type === 'submit'` and fired the form `submit` event immediately. In first-time onboarding this was masked because Step 3 was empty and validation failed; but for already-completed profiles, all fields were valid, so it immediately saved and redirected.
+  - **Files Modified**:
+    - `src/screens/ProfileScreen.jsx`: Added distinct keys (`key="continue-step"` and `key="submit-profile"`) to ensure React replaces the DOM node instead of mutating it in-place during the click event lifecycle.
+    - `scripts/verify-browser.mjs`: Added dedicated 15-step regression test `Editing existing completed profile stays on step 3 without premature save`.
+  - **Verifications**:
+    - `npm test`: 9 test suites, 51/51 tests passing.
+    - `npm run build`: Vite production build passed cleanly.
+    - `node scripts/verify-browser.mjs`: All 18 checks passing with 0 JS errors.
 - **Known Problems**: None.
-- **Recommended Next Step**: Await user direction on the next feature or enhancement for `feature/google-auth-user-database`.
+- **Recommended Next Step**: Commit and push changes to trigger Vercel deployment, then run live browser verification against `https://bits-in-motion-feature.vercel.app`.

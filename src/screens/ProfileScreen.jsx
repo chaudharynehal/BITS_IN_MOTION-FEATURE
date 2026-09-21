@@ -180,9 +180,9 @@ export default function ProfileScreen({ initialProfile, signedIn, demoMode, acco
           <div className="onboarding-actions">
             <button className="button button-quiet" type="button" onClick={handleBack} disabled={saving}><ArrowLeft size={17} /> Back</button>
             {step < 2 ? (
-              <button className="button button-primary" type="button" onClick={handleContinue}>Continue <ArrowRight size={17} /></button>
+              <button key="continue-step" className="button button-primary" type="button" onClick={handleContinue}>Continue <ArrowRight size={17} /></button>
             ) : (
-              <button className="button button-primary" type="submit" disabled={saving}>{saving ? 'Saving your profile…' : hasExistingProfile ? <><Save size={17} /> Save & refresh plan</> : <>Create my plan <ArrowRight size={17} /></>}</button>
+              <button key="submit-profile" className="button button-primary" type="submit" disabled={saving}>{saving ? 'Saving your profile…' : hasExistingProfile ? <><Save size={17} /> Save & refresh plan</> : <>Create my plan <ArrowRight size={17} /></>}</button>
             )}
           </div>
         </form>
