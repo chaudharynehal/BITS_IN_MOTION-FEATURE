@@ -1,5 +1,7 @@
 const PROFILE_KEY = 'bits-motion-profile-v1';
 const SESSION_KEY = 'bits-motion-sessions-v1';
+const PLAN_KEY = 'bits-motion-plan-v1';
+const GUEST_ACTIVE_KEY = 'bits-motion-guest-active-v1';
 
 function readJson(key, fallback) {
   try {
@@ -25,6 +27,32 @@ export function loadGuestProfile() {
 
 export function saveGuestProfile(profile) {
   return writeJson(PROFILE_KEY, profile);
+}
+
+export function loadGuestPlan() {
+  return readJson(PLAN_KEY, null);
+}
+
+export function saveGuestPlan(plan) {
+  return writeJson(PLAN_KEY, plan);
+}
+
+export function isGuestModeActive() {
+  try {
+    return localStorage.getItem(GUEST_ACTIVE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setGuestModeActive(active) {
+  try {
+    if (active) localStorage.setItem(GUEST_ACTIVE_KEY, '1');
+    else localStorage.removeItem(GUEST_ACTIVE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function loadGuestSessions() {

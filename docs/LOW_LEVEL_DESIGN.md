@@ -28,18 +28,18 @@ The camera path and account path are intentionally separate. Camera images stay 
 
 `src/App.jsx` is the coordinator. It decides which screen is visible and holds the current profile, plan, active exercise, session result, account and session history.
 
-The normal flow is:
+The V2 journey is:
 
 ```text
-Welcome
-  → Profile
-  → Personalized plan
-  → Selected camera coach
-  → Result and workout impact
-  → Progress or leaderboard
+Welcome → Google or Guest → Complete profile → Saved plan
+                                                ↓
+                         Start a workout OR Explore dashboard
+                                                ↓
+                Home / Workouts / My Plan / Coach / Progress
+                     plus Profile and Leaderboard in the account menu
 ```
 
-There is no large routing framework. The prototype uses a small `screen` state because the presentation flow is linear and this reduces moving parts.
+The existing `screen` state now stays in sync with small URL hash routes and browser Back/Forward. Profile completion is the only onboarding gate; workout completion is never a navigation gate. Refresh restores the session, profile, saved plan and history from the appropriate account or guest store. See [the V2 product guide](V2_PRODUCT_EXPERIENCE.md) for the user-facing flow and deployment checks.
 
 ### Important frontend folders
 
@@ -73,7 +73,7 @@ sequenceDiagram
     API-->>Browser: Secure HTTP-only session cookie
 ```
 
-The application never sees or stores the user's Google password. The server stores Google's stable account identifier, email, display name and avatar URL.
+The application never sees or stores the user's Google password. The server stores Google's stable account identifier, email and avatar URL. The existing `users.display_name` starts with the Google name and becomes the preferred name when the person saves Profile. Returning Google login preserves that chosen name. Profile fields and preferred name save in one atomic PostgreSQL statement.
 
 The signed session is held in an HTTP-only cookie. JavaScript cannot read that cookie, which reduces the risk of session theft through an accidental frontend script injection.
 
@@ -81,14 +81,15 @@ The signed session is held in an HTTP-only cookie. JavaScript cannot read that c
 
 ### Guest mode
 
-- Profile and sessions use browser `localStorage`.
+- Profile, saved plan and sessions use browser `localStorage`.
+- An independent active-guest marker restores Guest after refresh; exiting Guest preserves its saved data.
 - Data remains on that browser only.
 - The judge demo works without any cloud configuration.
 - Sample history is visibly labelled.
 
 ### Signed-in mode
 
-- Profile and sessions use the authenticated API.
+- Profile, saved plan and sessions use the authenticated API.
 - The same account can restore progress on another device.
 - Sessions save automatically when the coach ends.
 - The user may opt in to the public leaderboard using an alias.

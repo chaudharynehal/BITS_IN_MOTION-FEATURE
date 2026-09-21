@@ -2,9 +2,11 @@
 
 A presentation-ready Smart India Hackathon prototype for Problem Statement 26196: a hostel-friendly fitness companion for students with limited space, time and equipment.
 
-The working demo proves the complete loop:
+Choose Google or Guest, complete a short profile including your preferred name, and receive a saved personal plan. Start a workout when ready or explore the dashboard immediately.
 
-**Google/Guest Profile → Personalized Plan → Multi-exercise Camera Coach → Result → Progress → Leaderboard**
+**Dashboard → My Plan · Workout Library · Camera Coach · Progress · Leaderboard · Profile**
+
+Workout completion never unlocks navigation. The V2 homepage, onboarding, navigation, persistence rules, and update checklist are explained in [`docs/V2_PRODUCT_EXPERIENCE.md`](docs/V2_PRODUCT_EXPERIENCE.md).
 
 
 ## Run locally
@@ -39,7 +41,7 @@ Guest mode works without cloud credentials and stores data only in the current b
 All dependency versions are pinned in `package.json` and locked in `package-lock.json`. The lightweight pose model and MediaPipe WebAssembly runtime are bundled under `public/` so the flagship flow does not need to download model files during the demo.
 ## Architecture
 
-- `src/screens` — welcome, profile, plan, live coach, result, progress and leaderboard screens.
+- `src/screens` — welcome, dashboard, workout library, profile, plan, live coach, result, progress and leaderboard screens.
 - `src/components` — reusable navigation, Google sign-in, account, workout and guidance components.
 - `src/data` — guest-mode exercise definitions.
 - `src/services` — authenticated browser-to-API calls.
@@ -54,9 +56,10 @@ All dependency versions are pinned in `package.json` and locked in `package-lock
 - `api/index.js` — Vercel serverless entry point.
 - `docs/LOW_LEVEL_DESIGN.md` — detailed system explanation and diagrams.
 - `docs/AUTH_DATABASE_DEPLOYMENT.md` — beginner setup for Neon, Google Cloud, GitHub and Vercel.
+- `docs/V2_PRODUCT_EXPERIENCE.md` — V2 navigation, preferred names, saved plans, existing-user compatibility and deployment checks.
 - `public/manifest.webmanifest` and `public/sw.js` — lightweight installable PWA shell.
 
-Guest profile and history are browser-local. Signed-in profiles and numeric results are stored in PostgreSQL. Raw camera frames are never saved, uploaded or recorded.
+Guest profile, plan and history are browser-local. Signed-in profiles, plans and numeric results are stored in PostgreSQL. Raw camera frames are never saved, uploaded or recorded.
 
 ## Camera logic
 
@@ -84,14 +87,14 @@ Configured values range from **3.8 MET** for moderate calisthenics to **8.0 MET*
 
 ## Judge demo script
 
-1. On Welcome, select **Try judge demo**.
-2. Point out the preloaded 20-year-old beginner profile, BMI 22.9 and non-medical disclaimer.
-3. Select **Create my plan** and explain why the 20-minute plan is beginner-paced, hostel-friendly and equipment-free.
+1. On Welcome, select **Preview the isolated judge demo**.
+2. The dashboard opens with a temporary sample profile and clearly labelled demo history. Show that Workouts, My Plan and Progress are already accessible.
+3. Open **My Plan** and explain why the saved 20-minute plan is beginner-paced, hostel-friendly and equipment-free. **Explore dashboard** postpones training without deleting the plan.
 4. On **Bodyweight squats**, select **Start camera coach**.
 5. Wait for “Ready when you are,” then select **Start Camera** and grant browser permission.
 6. Step back until hips, knees and ankles are visible. Perform three slow squats: stand tall, reach the down threshold, then return to standing.
 7. Show the rep count, live angle, movement stage and held correction cues. Mention that the same engine supports push-ups, crunches and jumping jacks.
-8. Select **End session**, explain the labelled MET estimate, then **Save session**.
+8. Select **End session** and explain the labelled MET estimate. Demo results remain temporary; real guest/account sessions follow their respective save paths.
 9. Open **Progress** to show the temporary demo session alongside clearly labelled sample history.
 
 For a reliable stage demo, place the camera roughly hip height, keep the whole body inside the frame, stand mostly side-on and use even lighting.

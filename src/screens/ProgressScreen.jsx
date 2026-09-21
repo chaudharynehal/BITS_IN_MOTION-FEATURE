@@ -1,6 +1,5 @@
 import { AlertTriangle, CalendarDays, ChevronRight, Cloud, Dumbbell, Flame, History, LoaderCircle, RefreshCw, Sparkles, Trophy } from 'lucide-react';
 import ScreenHeader from '../components/ScreenHeader';
-import StepRail from '../components/StepRail';
 import { getProgressSummary } from '../utils/storage';
 
 function formatDuration(seconds) {
@@ -15,8 +14,7 @@ export default function ProgressScreen({ sessions, loadState, persistenceMode, o
   const hasSampleHistory = sessions.some((session) => session.source === 'sample');
   return (
     <main className="screen-page progress-page">
-      <StepRail current="Progress" />
-      <ScreenHeader eyebrow="Step 5 of 5" title="Momentum, made visible" description={accountMode ? 'Your private history is loaded only from your signed-in account.' : demoMode ? 'Judge Demo history is temporary and separate from all saved data.' : 'Guest history is stored only in this browser.'} onBack={onHome} />
+      <ScreenHeader eyebrow="Your progress" title="Momentum, made visible" description={accountMode ? 'Your private history is loaded only from your signed-in account.' : demoMode ? 'Judge Demo history is temporary and separate from all saved data.' : 'Guest history is stored only in this browser.'} onBack={onHome} />
 
       {loadState === 'loading' ? (
         <section className="progress-load-state panel" aria-live="polite">

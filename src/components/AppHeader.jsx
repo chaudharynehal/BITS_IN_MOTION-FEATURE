@@ -1,20 +1,25 @@
-import { BarChart3, Home, Trophy, UserRound } from 'lucide-react';
+import { BarChart3, Camera, Dumbbell, Home, ListChecks } from 'lucide-react';
 import UserMenu from './UserMenu';
 
-export default function AppHeader({ screen, onNavigate, user, onSignOut, compact = false }) {
+const NAV_ITEMS = [
+  ['dashboard', 'Home', Home],
+  ['workouts', 'Workouts', Dumbbell],
+  ['plan', 'My Plan', ListChecks],
+  ['coach', 'Coach', Camera],
+  ['progress', 'Progress', BarChart3],
+];
+
+export default function AppHeader({ screen, onNavigate, user, status, displayName, onSignOut, onExitGuest }) {
   return (
-    <header className={`app-header ${compact ? 'app-header-compact' : ''}`}>
-      <button className="brand-button" onClick={() => onNavigate('welcome')} aria-label="BITS in Motion home">
+    <header className="app-header">
+      <button className="brand-button" onClick={() => onNavigate('dashboard')} aria-label="BITS in Motion dashboard">
         <img src="/logo.png" alt="" />
         <span>BITS <small>in Motion</small></span>
       </button>
       <nav className="desktop-nav" aria-label="Primary navigation">
-        <button className={screen === 'welcome' ? 'active' : ''} onClick={() => onNavigate('welcome')}><Home size={17} /> Home</button>
-        <button className={screen === 'profile' ? 'active' : ''} onClick={() => onNavigate('profile')}><UserRound size={17} /> Profile</button>
-        <button className={screen === 'progress' ? 'active' : ''} onClick={() => onNavigate('progress')}><BarChart3 size={17} /> Progress</button>
-        <button className={screen === 'leaderboard' ? 'active' : ''} onClick={() => onNavigate('leaderboard')}><Trophy size={17} /> Leaderboard</button>
+        {NAV_ITEMS.map(([destination, label, Icon]) => <button className={screen === destination ? 'active' : ''} aria-current={screen === destination ? 'page' : undefined} onClick={() => onNavigate(destination)} key={destination}><Icon size={17} /> {label}</button>)}
       </nav>
-      <UserMenu user={user} onSignOut={onSignOut} />
+      <UserMenu user={user} status={status} displayName={displayName} onNavigate={onNavigate} onSignOut={onSignOut} onExitGuest={onExitGuest} />
     </header>
   );
 }

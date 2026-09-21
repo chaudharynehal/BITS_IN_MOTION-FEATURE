@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Camera, CircleStop, Info, LoaderCircle, RefreshCw, RotateCcw, ShieldCheck, TriangleAlert, VideoOff } from 'lucide-react';
-import StepRail from '../components/StepRail';
 import { getCameraErrorState, isCameraSupported, startCamera, stopCamera } from '../vision/camera';
 import { clearPoseOverlay, drawPoseOverlay, initializePoseLandmarker } from '../vision/poseLandmarker';
 import { createExerciseDetector, DETECTOR_CONFIGS } from '../vision/exerciseDetectors';
@@ -233,11 +232,10 @@ export default function CoachScreen({ exerciseId = 'squats', onBack, onEndSessio
   return (
     <main className="coach-page">
       <div className="coach-topbar">
-        <button className="icon-button icon-button-dark" onClick={handleBack} aria-label="Back to plan"><ArrowLeft size={21} /></button>
+        <button className="icon-button icon-button-dark" onClick={handleBack} aria-label="Back to previous screen"><ArrowLeft size={21} /></button>
         <div><span className="eyebrow light">Live {detectorConfig.name}</span><small>Basic observable pose feedback</small></div>
         <button className="coach-reset" onClick={handleReset} disabled={!isRunning}><RotateCcw size={17} /> Reset</button>
       </div>
-      <StepRail current="Coach" />
 
       <div className="coach-layout">
         <section className="camera-panel">

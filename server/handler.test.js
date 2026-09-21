@@ -2,8 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   databaseConfigured: true,
+  failProfileSave: false,
   users: [],
   profiles: new Map(),
+  plans: [],
+  planItems: [],
+  exercises: [],
   sessions: [],
   exerciseResults: new Map(),
 }));
@@ -46,7 +50,6 @@ vi.mock('./db.js', () => ({
         state.users.push(user);
       } else {
         user.email = params[1];
-        user.display_name = params[2];
         user.avatar_url = params[3];
       }
       return [user];
@@ -56,8 +59,9 @@ vi.mock('./db.js', () => ({
       const profile = state.profiles.get(params[0]);
       return profile ? [profile] : [];
     }
-    if (statement.startsWith('INSERT INTO profiles')) {
-      state.profiles.set(params[0], {
+    if (statement.startsWith('WITH saved_profile AS')) {
+      if (state.failProfileSave) throw new Error('Simulated database failure');
+      const profile = {
         user_id: params[0],
         age: params[1],
         height_cm: params[2],
@@ -68,16 +72,60 @@ vi.mock('./db.js', () => ({
         location: params[7],
         equipment: params[8],
         low_impact: params[9],
-      });
-      return [];
+      };
+      state.profiles.set(params[0], profile);
+      const account = state.users.find((candidate) => candidate.id === params[0]);
+      account.display_name = params[10];
+      account.leaderboard_opt_in = params[11];
+      account.leaderboard_name = params[12];
+      return [{ profile, account }];
     }
-    if (statement.startsWith('UPDATE users SET leaderboard_opt_in')) {
-      const user = state.users.find((candidate) => candidate.id === params[0]);
-      user.leaderboard_opt_in = params[1];
-      user.leaderboard_name = params[2];
-      return [];
+    if (statement.startsWith('SELECT id,title,focus,total_minutes') && statement.includes('WHERE user_id=$1')) {
+      return state.plans.filter((plan) => plan.user_id === params[0])
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 1);
     }
-    if (statement.startsWith('SELECT id,title,focus,total_minutes')) return [];
+    if (statement.startsWith('SELECT * FROM exercises WHERE active=TRUE')) {
+      return state.exercises.filter((exercise) => exercise.active).sort((a, b) => a.id.localeCompare(b.id));
+    }
+    if (statement.startsWith('WITH inserted_plan AS')) {
+      const plan = {
+        id: params[0],
+        user_id: params[1],
+        title: params[2],
+        focus: params[3],
+        total_minutes: params[4],
+        reasons: JSON.parse(params[5]),
+        created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, state.plans.length)).toISOString(),
+      };
+      state.plans.push(plan);
+      state.planItems.push(...params[6].map((exerciseId, index) => ({
+        plan_id: plan.id,
+        exercise_id: exerciseId,
+        position: params[7][index],
+        target_label: params[8][index],
+      })));
+      return [{ id: plan.id, created_at: plan.created_at }];
+    }
+    if (statement.includes('FROM plan_items pi') && statement.includes('WHERE pi.plan_id=$1 AND wp.user_id=$2')) {
+      const plan = state.plans.find((candidate) => candidate.id === params[0] && candidate.user_id === params[1]);
+      if (!plan) return [];
+      return state.planItems.filter((item) => item.plan_id === plan.id)
+        .sort((a, b) => a.position - b.position).map((item) => {
+          const exercise = state.exercises.find((candidate) => candidate.id === item.exercise_id);
+          return {
+            ...item,
+            exercise_name: exercise.name,
+            exercise_category: exercise.category,
+            exercise_instruction: exercise.instruction,
+            exercise_icon: exercise.icon,
+            camera_supported: exercise.camera_supported,
+            detection_type: exercise.detection_type,
+            met: exercise.met,
+            primary_muscles: exercise.primary_muscles,
+            secondary_muscles: exercise.secondary_muscles,
+          };
+        });
+    }
     if (statement.includes('FROM sessions s') && statement.includes('WHERE s.user_id=$1')) {
       return state.sessions.filter((session) => session.user_id === params[0]).map((session) => ({
         ...session,
@@ -118,6 +166,7 @@ vi.mock('./db.js', () => ({
 }));
 
 import { handleApiRequest } from './handler.js';
+import { EXERCISE_SEED } from './schema.js';
 
 function createResponse() {
   const headers = new Map();
@@ -163,17 +212,44 @@ function profileFor(name) {
   };
 }
 
+function profileInput(overrides = {}) {
+  return {
+    displayName: 'Preferred A',
+    age: '25',
+    height: '175',
+    weight: '70',
+    level: 'Beginner',
+    goal: 'Stay fit',
+    time: '20',
+    location: 'Home',
+    equipment: 'None',
+    lowImpact: false,
+    leaderboardOptIn: false,
+    leaderboardName: '',
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   state.databaseConfigured = true;
+  state.failProfileSave = false;
   state.users.length = 0;
   state.profiles.clear();
+  state.plans.length = 0;
+  state.planItems.length = 0;
+  state.exercises = EXERCISE_SEED.map((exercise) => ({
+    id: exercise[0], name: exercise[1], category: exercise[2], duration_label: exercise[3],
+    instruction: exercise[4], icon: exercise[5], camera_supported: exercise[6],
+    detection_type: exercise[7], met: exercise[8], primary_muscles: exercise[9],
+    secondary_muscles: exercise[10], active: true,
+  }));
   state.sessions.length = 0;
   state.exerciseResults.clear();
   process.env.GOOGLE_CLIENT_ID = 'test-client-id.apps.googleusercontent.com';
   process.env.SESSION_SECRET = 'test-session-secret-that-is-longer-than-thirty-two-characters';
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => vi.restoreAllMocks());
 
 describe('Google account persistence and ownership', () => {
   it('creates a user once and reuses the same internal account on returning login', async () => {
@@ -184,6 +260,82 @@ describe('Google account persistence and ownership', () => {
     expect(second.status).toBe(200);
     expect(state.users).toHaveLength(1);
     expect(state.users[0].google_sub).toBe('google-sub-a');
+  });
+
+  it('persists a chosen preferred name and does not overwrite it on returning Google login', async () => {
+    const first = await login('account-a');
+    const saved = await callApi('profile', {
+      method: 'PUT',
+      cookie: cookieValue(first.cookie),
+      body: {
+        displayName: 'Preferred A',
+        age: '25',
+        height: '175',
+        weight: '70',
+        level: 'Beginner',
+        goal: 'Stay fit',
+        time: '20',
+        location: 'Home',
+        equipment: 'None',
+        lowImpact: false,
+        leaderboardOptIn: false,
+        leaderboardName: '',
+      },
+    });
+    const returning = await login('account-a');
+
+    expect(saved.status).toBe(200);
+    expect(saved.body.profile.displayName).toBe('Preferred A');
+    expect(saved.body.user.name).toBe('Preferred A');
+    expect(returning.body.user.name).toBe('Preferred A');
+    expect(returning.body.profile.displayName).toBe('Preferred A');
+  });
+
+  it.each(['', '   ', null, 123, {}, 'x'.repeat(81)])('rejects invalid preferred name %j without changing the profile', async (displayName) => {
+    const account = await login('account-a');
+    const response = await callApi('profile', {
+      method: 'PUT', cookie: cookieValue(account.cookie), body: profileInput({ displayName }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('INVALID_REQUEST');
+    expect(state.profiles.size).toBe(0);
+    expect(state.users[0].display_name).toBe('Account A');
+  });
+
+  it('updates only the authenticated profile and preferred name despite browser-provided ownership', async () => {
+    const accountA = await login('account-a');
+    await login('account-b');
+    const [userA, userB] = state.users;
+    state.profiles.set(userB.id, profileFor('B'));
+
+    const saved = await callApi('profile&userId=' + userB.id, {
+      method: 'PUT',
+      cookie: cookieValue(accountA.cookie),
+      body: profileInput({ displayName: '  My chosen name  ', userId: userB.id, user_id: userB.id }),
+    });
+
+    expect(saved.status).toBe(200);
+    expect(saved.body.profile.displayName).toBe('My chosen name');
+    expect(state.profiles.get(userA.id).weight_kg).toBe(70);
+    expect(userA.display_name).toBe('My chosen name');
+    expect(userB.display_name).toBe('Account B');
+    expect(state.profiles.get(userB.id).marker).toBe('B');
+    expect(state.profiles.size).toBe(2);
+  });
+
+  it('returns a safe JSON error when an asynchronous profile save fails', async () => {
+    const account = await login('account-a');
+    state.failProfileSave = true;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const response = await callApi('profile', {
+      method: 'PUT', cookie: cookieValue(account.cookie), body: profileInput(),
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'The server could not complete this request.', code: 'SERVER_ERROR' });
+    expect(state.profiles.size).toBe(0);
+    expect(state.users[0].display_name).toBe('Account A');
   });
 
   it('creates independent users for different verified Google subjects', async () => {
@@ -283,6 +435,118 @@ describe('Google account persistence and ownership', () => {
     expect(aSessionsAgain.body).toHaveLength(1);
     expect(aSessionsAgain.body[0].formSummary).toBe('A only');
     expect(state.users).toHaveLength(2);
+  });
+});
+
+describe('Saved plans and ownership', () => {
+  it('requires authentication to read or generate a private plan', async () => {
+    const read = await callApi('plan');
+    const create = await callApi('plan', { method: 'POST' });
+
+    expect(read.status).toBe(401);
+    expect(create.status).toBe(401);
+    expect(state.plans).toEqual([]);
+    expect(state.planItems).toEqual([]);
+    expect(state.sessions).toEqual([]);
+  });
+
+  it('returns an empty plan for a new account and requires a saved profile before generation', async () => {
+    const account = await login('account-a');
+    const cookie = cookieValue(account.cookie);
+    const read = await callApi('plan', { cookie });
+    const create = await callApi('plan', { method: 'POST', cookie });
+
+    expect(read.status).toBe(200);
+    expect(read.body).toBeNull();
+    expect(create.status).toBe(400);
+    expect(create.body.error).toBe('Complete your profile first.');
+    expect(state.plans).toEqual([]);
+    expect(state.planItems).toEqual([]);
+    expect(state.sessions).toEqual([]);
+    expect(state.exerciseResults.size).toBe(0);
+  });
+
+  it('persists plan items in order, restores the same latest plan and never creates workouts by planning', async () => {
+    const account = await login('account-a');
+    const cookie = cookieValue(account.cookie);
+    await callApi('profile', { method: 'PUT', cookie, body: profileInput() });
+
+    const created = await callApi('plan', { method: 'POST', cookie });
+    expect(created.status).toBe(200);
+    expect(created.body.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(created.body.exercises.map((exercise) => exercise.id)).toEqual([
+      'warmup', 'squats', 'jumping-jacks', 'pushups', 'crunches', 'plank', 'cooldown',
+    ]);
+    expect(state.plans).toHaveLength(1);
+    expect(state.planItems.map((item) => item.position)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    // Retrieval joins the saved items; changing fixture order must not reorder the plan.
+    state.planItems.reverse();
+    const restored = await callApi('plan', { cookie });
+    const reopened = await callApi('plan', { cookie });
+    expect(restored.body).toEqual(created.body);
+    expect(reopened.body).toEqual(created.body);
+    expect(state.plans).toHaveLength(1);
+
+    await callApi('profile', {
+      method: 'PUT', cookie,
+      body: profileInput({ time: '30', level: 'Intermediate', equipment: 'Backpack', goal: 'Build strength' }),
+    });
+    const updated = await callApi('plan', { method: 'POST', cookie });
+    const latest = await callApi('plan', { cookie });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.id).not.toBe(created.body.id);
+    expect(updated.body.totalMinutes).toBe(30);
+    expect(updated.body.exercises.map((exercise) => exercise.id)).toContain('rows');
+    expect(latest.body).toEqual(updated.body);
+    expect(state.plans).toHaveLength(2);
+    expect(state.plans.some((plan) => plan.id === created.body.id)).toBe(true);
+    expect(state.sessions).toEqual([]);
+    expect(state.exerciseResults.size).toBe(0);
+    expect((await callApi('sessions', { cookie })).body).toEqual([]);
+  });
+
+  it('keeps A and B plans independent across logout and return despite browser-supplied owner IDs', async () => {
+    const accountA = await login('account-a');
+    const userA = state.users[0];
+    const cookieA = cookieValue(accountA.cookie);
+    await callApi('profile', { method: 'PUT', cookie: cookieA, body: profileInput() });
+    const planA = await callApi('plan', { method: 'POST', cookie: cookieA });
+    await callApi('logout', { method: 'POST', cookie: cookieA });
+
+    const accountB = await login('account-b');
+    const userB = state.users[1];
+    const cookieB = cookieValue(accountB.cookie);
+    const beforeB = await callApi('plan&userId=' + userA.id + '&planId=' + planA.body.id, { cookie: cookieB });
+    expect(beforeB.status).toBe(200);
+    expect(beforeB.body).toBeNull();
+    await callApi('profile', {
+      method: 'PUT', cookie: cookieB,
+      body: profileInput({ displayName: 'Preferred B', time: '30', level: 'Intermediate', goal: 'Build strength', equipment: 'Backpack' }),
+    });
+    const planB = await callApi('plan&userId=' + userA.id, {
+      method: 'POST', cookie: cookieB,
+      body: { userId: userA.id, user_id: userA.id, profile: profileInput() },
+    });
+    const restoredB = await callApi('plan&userId=' + userA.id + '&planId=' + planA.body.id, { cookie: cookieB });
+    expect(planB.status).toBe(200);
+    expect(planB.body.id).not.toBe(planA.body.id);
+    expect(planB.body.totalMinutes).toBe(30);
+    expect(restoredB.body).toEqual(planB.body);
+    expect(state.plans.find((plan) => plan.id === planB.body.id).user_id).toBe(userB.id);
+
+    await callApi('logout', { method: 'POST', cookie: cookieB });
+    const returningA = await login('account-a');
+    const restoredA = await callApi('plan&userId=' + userB.id + '&planId=' + planB.body.id, {
+      cookie: cookieValue(returningA.cookie),
+    });
+    expect(restoredA.status).toBe(200);
+    expect(restoredA.body).toEqual(planA.body);
+    expect(state.plans.find((plan) => plan.id === planA.body.id).user_id).toBe(userA.id);
+    expect(state.users).toHaveLength(2);
+    expect(state.plans).toHaveLength(2);
+    expect(state.sessions).toEqual([]);
+    expect(state.exerciseResults.size).toBe(0);
   });
 });
 

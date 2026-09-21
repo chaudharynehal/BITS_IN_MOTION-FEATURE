@@ -3,30 +3,41 @@ import { LoaderCircle } from 'lucide-react';
 
 const SCRIPT_ID = 'google-identity-services';
 
+let scriptPromise;
+
 function loadGoogleScript() {
   if (globalThis.google?.accounts?.id) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const existing = document.getElementById(SCRIPT_ID);
-    if (existing) {
-      existing.addEventListener('load', resolve, { once: true });
-      existing.addEventListener('error', reject, { once: true });
-      return;
-    }
+  if (scriptPromise) return scriptPromise;
+  scriptPromise = new Promise((resolve, reject) => {
+    document.getElementById(SCRIPT_ID)?.remove();
     const script = document.createElement('script');
     script.id = SCRIPT_ID;
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
-    script.onload = resolve;
-    script.onerror = reject;
+    const timeout = window.setTimeout(() => fail(), 12000);
+    function fail() {
+      window.clearTimeout(timeout);
+      script.remove();
+      scriptPromise = null;
+      reject(new Error('Google sign-in could not load.'));
+    }
+    script.onload = () => {
+      window.clearTimeout(timeout);
+      if (globalThis.google?.accounts?.id) resolve();
+      else fail();
+    };
+    script.onerror = fail;
     document.head.appendChild(script);
   });
+  return scriptPromise;
 }
 
 export default function GoogleSignInButton({ onCredential, disabled = false }) {
   const containerRef = useRef(null);
   const credentialHandlerRef = useRef(onCredential);
   const [status, setStatus] = useState('loading');
+  const [attempt, setAttempt] = useState(0);
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   useEffect(() => {
@@ -39,6 +50,7 @@ export default function GoogleSignInButton({ onCredential, disabled = false }) {
       return undefined;
     }
     let active = true;
+    setStatus('loading');
     loadGoogleScript().then(() => {
       if (!active || !containerRef.current) return;
       globalThis.google.accounts.id.initialize({
@@ -59,7 +71,7 @@ export default function GoogleSignInButton({ onCredential, disabled = false }) {
       setStatus('ready');
     }).catch(() => active && setStatus('error'));
     return () => { active = false; };
-  }, [clientId, disabled]);
+  }, [clientId, disabled, attempt]);
 
   if (!clientId || disabled) {
     return <button className="google-placeholder" type="button" disabled>Google account sync needs setup</button>;
@@ -68,7 +80,7 @@ export default function GoogleSignInButton({ onCredential, disabled = false }) {
   return (
     <div className="google-button-wrap">
       {status === 'loading' && <div className="google-loading"><LoaderCircle className="spin" size={17} /> Loading secure sign-in…</div>}
-      {status === 'error' && <div className="auth-error">Google sign-in could not load. Continue as guest and try again later.</div>}
+      {status === 'error' && <div className="auth-error">Google sign-in could not load. <button type="button" className="text-button" onClick={() => setAttempt((value) => value + 1)}>Retry Google sign-in</button> You can also continue as a guest.</div>}
       <div ref={containerRef} className={status === 'ready' ? '' : 'google-button-hidden'} />
     </div>
   );

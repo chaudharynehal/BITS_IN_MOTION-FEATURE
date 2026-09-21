@@ -102,13 +102,15 @@ function publicUser(row) {
   return row ? {
     email: row.email,
     name: row.display_name,
+    avatarUrl: row.avatar_url,
     leaderboardOptIn: row.leaderboard_opt_in,
     leaderboardName: row.leaderboard_name,
   } : null;
 }
 
-function publicProfile(row) {
+function publicProfile(row, displayName = '') {
   return row ? {
+    displayName,
     age: String(row.age),
     height: String(row.height_cm),
     weight: String(row.weight_kg),
@@ -122,6 +124,9 @@ function publicProfile(row) {
 }
 
 function validateProfile(profile) {
+  if (typeof profile.displayName !== 'string') return 'Preferred name must contain 1 to 80 characters.';
+  const displayName = profile.displayName.trim();
+  if (!displayName || displayName.length > 80) return 'Preferred name must contain 1 to 80 characters.';
   const age = Number(profile.age);
   const height = Number(profile.height);
   const weight = Number(profile.weight);
@@ -193,7 +198,7 @@ async function authenticatedUser(req) {
 
 async function getAccountPayload(user) {
   const profiles = await query('SELECT * FROM profiles WHERE user_id = $1', [user.id]);
-  return { user: publicUser(user), profile: publicProfile(profiles[0]) };
+  return { user: publicUser(user), profile: publicProfile(profiles[0], user.display_name) };
 }
 
 async function handleGoogleAuth(req, res) {
@@ -224,7 +229,7 @@ async function handleGoogleAuth(req, res) {
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (google_sub) DO UPDATE SET
        email = EXCLUDED.email,
-       display_name = EXCLUDED.display_name,
+       display_name = users.display_name,
        avatar_url = EXCLUDED.avatar_url,
        last_login_at = NOW()
      RETURNING *`,
@@ -241,24 +246,36 @@ async function handleProfile(req, res, user) {
   const body = await readJson(req);
   const validationError = validateProfile(body);
   if (validationError) throw new RequestError(400, validationError);
-  await query(
-    `INSERT INTO profiles (
-      user_id, age, height_cm, weight_kg, fitness_level, goal,
-      available_minutes, location, equipment, low_impact, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
-    ON CONFLICT (user_id) DO UPDATE SET
-      age=EXCLUDED.age, height_cm=EXCLUDED.height_cm, weight_kg=EXCLUDED.weight_kg,
-      fitness_level=EXCLUDED.fitness_level, goal=EXCLUDED.goal,
-      available_minutes=EXCLUDED.available_minutes, location=EXCLUDED.location,
-      equipment=EXCLUDED.equipment, low_impact=EXCLUDED.low_impact, updated_at=NOW()`,
-    [user.id, Number(body.age), Number(body.height), Number(body.weight), body.level, body.goal, Number(body.time), body.location, body.equipment, body.lowImpact === true],
+  const displayName = body.displayName.trim();
+  const leaderboardName = String(body.leaderboardName || displayName).trim().slice(0, 40);
+  // Both records change together, so a failed save cannot leave half an updated profile.
+  const rows = await query(
+    `WITH saved_profile AS (
+      INSERT INTO profiles (
+        user_id, age, height_cm, weight_kg, fitness_level, goal,
+        available_minutes, location, equipment, low_impact, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+      ON CONFLICT (user_id) DO UPDATE SET
+        age=EXCLUDED.age, height_cm=EXCLUDED.height_cm, weight_kg=EXCLUDED.weight_kg,
+        fitness_level=EXCLUDED.fitness_level, goal=EXCLUDED.goal,
+        available_minutes=EXCLUDED.available_minutes, location=EXCLUDED.location,
+        equipment=EXCLUDED.equipment, low_impact=EXCLUDED.low_impact, updated_at=NOW()
+      RETURNING *
+    ), updated_user AS (
+      UPDATE users SET display_name=$11, leaderboard_opt_in=$12, leaderboard_name=$13
+      WHERE id=$1 RETURNING *
+    )
+    SELECT row_to_json(saved_profile) AS profile, row_to_json(updated_user) AS account
+    FROM saved_profile CROSS JOIN updated_user`,
+    [
+      user.id, Number(body.age), Number(body.height), Number(body.weight), body.level, body.goal,
+      Number(body.time), body.location, body.equipment, body.lowImpact === true,
+      displayName, body.leaderboardOptIn === true, leaderboardName || null,
+    ],
   );
-  const leaderboardName = String(body.leaderboardName || user.display_name).trim().slice(0, 40);
-  await query('UPDATE users SET leaderboard_opt_in=$2, leaderboard_name=$3 WHERE id=$1', [user.id, body.leaderboardOptIn === true, leaderboardName || null]);
-  const rows = await query('SELECT * FROM profiles WHERE user_id=$1', [user.id]);
   return send(res, 200, {
-    profile: publicProfile(rows[0]),
-    user: { ...publicUser(user), leaderboardOptIn: body.leaderboardOptIn === true, leaderboardName },
+    profile: publicProfile(rows[0].profile, rows[0].account.display_name),
+    user: publicUser(rows[0].account),
   });
 }
 
@@ -312,7 +329,7 @@ async function handlePlan(req, res, user) {
   if (req.method !== 'POST') return methodNotAllowed(res, ['GET', 'POST']);
   const profiles = await query('SELECT * FROM profiles WHERE user_id=$1', [user.id]);
   if (!profiles[0]) throw new RequestError(400, 'Complete your profile first.');
-  const profile = publicProfile(profiles[0]);
+  const profile = publicProfile(profiles[0], user.display_name);
   const exercises = await query('SELECT * FROM exercises WHERE active=TRUE ORDER BY id');
   const plan = buildPlan(profile, exercises);
   const planId = crypto.randomUUID();
@@ -391,13 +408,12 @@ async function handleSessions(req, res, user) {
        ON CONFLICT (session_id,exercise_id) DO UPDATE SET
          reps=EXCLUDED.reps, framing_interruptions=EXCLUDED.framing_interruptions,
          cue_counts=EXCLUDED.cue_counts, movement_metrics=EXCLUDED.movement_metrics
-       RETURNING session_id
+       RETURNING *
      )
      SELECT s.*, er.exercise_id, e.name AS exercise_name, er.reps,
        er.framing_interruptions, er.cue_counts, er.movement_metrics
      FROM upserted_session s
-     JOIN upserted_result ur ON ur.session_id=s.id
-     JOIN exercise_results er ON er.session_id=s.id AND er.exercise_id=$8
+     JOIN upserted_result er ON er.session_id=s.id
      JOIN exercises e ON e.id=er.exercise_id`,
     [
       user.id,
@@ -473,7 +489,7 @@ export async function handleApiRequest(req, res) {
     if (!isDatabaseConfigured()) throw new Error('DATABASE_NOT_CONFIGURED');
     if (action === 'auth-google') {
       if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
-      return handleGoogleAuth(req, res);
+      return await handleGoogleAuth(req, res);
     }
 
     const user = await authenticatedUser(req);
@@ -482,10 +498,10 @@ export async function handleApiRequest(req, res) {
       if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
       return send(res, 200, await getAccountPayload(user));
     }
-    if (action === 'profile') return handleProfile(req, res, user);
-    if (action === 'plan') return handlePlan(req, res, user);
-    if (action === 'sessions') return handleSessions(req, res, user);
-    if (action === 'leaderboard') return handleLeaderboard(req, res, user);
+    if (action === 'profile') return await handleProfile(req, res, user);
+    if (action === 'plan') return await handlePlan(req, res, user);
+    if (action === 'sessions') return await handleSessions(req, res, user);
+    if (action === 'leaderboard') return await handleLeaderboard(req, res, user);
     return send(res, 404, { error: 'Unknown API action.', code: 'NOT_FOUND' });
   } catch (error) {
     if (error instanceof RequestError) return send(res, error.status, { error: error.message, code: error.code });

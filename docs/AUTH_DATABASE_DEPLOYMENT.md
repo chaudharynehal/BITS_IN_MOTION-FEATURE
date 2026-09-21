@@ -1,6 +1,6 @@
 # Authentication, Database, and Vercel Setup
 
-This guide is written for a first-time setup. Follow it from top to bottom. The application keeps its existing React + Vite frontend, Vercel `/api` function, Google Identity Services login, Neon PostgreSQL database, and browser-only guest mode.
+This guide is written for a first-time setup. Follow it from top to bottom. If the application is already configured and you are installing the V2 experience, use [the V2 update guide](V2_PRODUCT_EXPERIENCE.md); this update requires no new environment variables or database migration. The application keeps its existing React + Vite frontend, Vercel `/api` function, Google Identity Services login, Neon PostgreSQL database, and browser-only guest mode.
 
 ## What is stored where
 
@@ -290,7 +290,7 @@ users
 exercises (shared definitions referenced by plans and results)
 ```
 
-Google's verified `sub` value has a unique constraint. The first login creates one internal UUID. Returning logins with the same verified `sub` update basic display information and reuse the same UUID.
+Google's verified `sub` value has a unique constraint. The first login creates one internal UUID. Returning logins with the same verified `sub` update Google email/avatar information and reuse the same UUID. They preserve the preferred name chosen in Profile; `users.display_name` stores that name.
 
 The browser never chooses ownership. The API reads the signed HttpOnly cookie, finds its internal user, and applies that user ID to every profile, plan, and session query. A `userId` placed in a query string or JSON request body is ignored.
 
@@ -464,7 +464,7 @@ Use **Retry**. Signed-in progress intentionally remains empty during the error; 
 ## Security summary
 
 - Google ID tokens are verified on the server with `google-auth-library` and the configured audience.
-- The server uses Google's verified subject, email, name, and avatar; it does not accept browser-supplied identity ownership.
+- The server uses Google's verified subject, email and avatar. Google name provides the first default; a saved preferred name remains unchanged on returning login. Browser-supplied identity ownership is never trusted.
 - Sessions use signed, expiring, HttpOnly, SameSite cookies and Secure cookies on Vercel/production.
 - Authenticated mutations require a same-origin browser marker and reject cross-site requests.
 - SQL parameters are passed separately from SQL text.

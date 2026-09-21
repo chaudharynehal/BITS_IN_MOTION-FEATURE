@@ -1,7 +1,6 @@
 import { Activity, ArrowRight, Check, Clock3, Cloud, CloudOff, Flame, RefreshCw, Save, ScanLine } from 'lucide-react';
 import FoodGuidanceCard from '../components/FoodGuidanceCard';
 import ScreenHeader from '../components/ScreenHeader';
-import StepRail from '../components/StepRail';
 import { getExerciseMet } from '../utils/calories';
 
 function formatDuration(seconds) {
@@ -15,8 +14,7 @@ export default function ResultScreen({ result, profile, saveState, automaticSave
   const saving = saveState === 'saving';
   return (
     <main className="screen-page result-page">
-      <StepRail current="Result" />
-      <ScreenHeader eyebrow="Step 4 of 5" title="Session complete" description="You showed up—and that is how momentum starts." />
+      <ScreenHeader eyebrow="Workout summary" title="Session complete" description="You showed up—and that is how momentum starts." />
 
       <section className="result-hero panel-dark">
         <div className="result-check"><Check size={30} /></div>
@@ -42,8 +40,8 @@ export default function ResultScreen({ result, profile, saveState, automaticSave
       <div className="result-grid">
         <section className="panel result-next">
           <span className="eyebrow">Your next action</span>
-          <h2>Complete the rest of today’s plan</h2>
-          <p>Move on to low-impact jumping jacks, push-ups and a supported plank. Keep the pace comfortable.</p>
+          <h2>Choose what feels right next</h2>
+          <p>Save this session, review your progress or head back to your dashboard. Your plan will be there whenever you’re ready.</p>
           <div className="result-actions">
             <button className="button button-primary" onClick={onSave} disabled={saved || saving}>
               {saving ? <><Cloud size={18} /> Saving automatically…</> : saved ? <><Check size={18} /> {automaticSave ? 'Saved to your account' : 'Session saved'}</> : saveState === 'error' ? <><CloudOff size={18} /> Retry account save</> : <><Save size={18} /> Save session</>}
@@ -56,7 +54,7 @@ export default function ResultScreen({ result, profile, saveState, automaticSave
       </div>
 
       <aside className="estimate-note"><Flame size={17} /><span><strong>Estimated calculation:</strong> {getExerciseMet(result.exerciseId)} MET × {profile.weight} kg × session hours. Actual energy use varies by person and intensity.</span></aside>
-      <button className="button button-quiet home-action" onClick={onHome}>Return home</button>
+      <button className="button button-quiet home-action" onClick={onHome}>Return to dashboard</button>
     </main>
   );
 }
