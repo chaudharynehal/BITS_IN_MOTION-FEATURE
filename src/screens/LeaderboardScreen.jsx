@@ -43,7 +43,6 @@ export default function LeaderboardScreen({ user, accountSyncAvailable, onHome }
         eyebrow="Community momentum"
         title="A leaderboard built for consistency"
         description="Compare completed workouts and tracked repetitions—not body measurements or appearance."
-        onBack={onHome}
       />
 
       {status === 'sample' && (

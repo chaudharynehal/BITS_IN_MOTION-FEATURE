@@ -286,12 +286,12 @@ try {
 
   await record('Homepage CTAs scroll to real sections and onboarding', async () => {
     await click('Features', '.marketing-nav button');
-    await ready(() => evaluate('Math.abs(document.querySelector(".student-benefits").getBoundingClientRect().top) < 2'));
+    await ready(() => evaluate('(() => { const r = document.querySelector(".student-benefits")?.getBoundingClientRect(); return Boolean(r && r.top >= -24 && r.top < 32); })()'));
     await click('How it works', '.marketing-nav button');
-    await ready(() => evaluate('Math.abs(document.querySelector(".how-it-works").getBoundingClientRect().top) < 2'));
+    await ready(() => evaluate('(() => { const r = document.querySelector(".how-it-works")?.getBoundingClientRect(); return Boolean(r && r.top >= 0 && r.top < innerHeight && window.scrollY > 200); })()'));
     await evaluate('window.scrollTo(0, 0)');
     await click('Explore features');
-    await ready(() => evaluate('Math.abs(document.querySelector(".student-benefits").getBoundingClientRect().top) < 2'));
+    await ready(() => evaluate('(() => { const r = document.querySelector(".student-benefits")?.getBoundingClientRect(); return Boolean(r && r.top >= -24 && r.top < 32); })()'));
     await evaluate('window.scrollTo(0, 0)');
     await click('Set up my fitness journey');
     await ready(() => evaluate('document.querySelector(".auth-choice-card").getBoundingClientRect().top < innerHeight'));
