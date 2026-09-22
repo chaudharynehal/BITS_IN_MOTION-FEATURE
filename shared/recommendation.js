@@ -24,7 +24,9 @@ export function calculateWorkoutDuration(plan) {
 
 // Pure shared rules; callers supply the local or active database catalogue.
 const normalize = (value) => String(value || '').trim().toLowerCase();
-export const MOVEMENT_SPACE = Object.freeze({ 'jumping-jacks': 'open', lunges: 'open' });
+// Compact student rooms avoid travel and wide arm/leg patterns. Home and
+// legacy open-space choices can use the wider catalogue movements.
+export const MOVEMENT_SPACE = Object.freeze({ 'jumping-jacks': 'standard', lunges: 'standard' });
 
 // Targets already persist as text in plan_items. Restore structured timing from
 // our versioned-by-format labels without changing old plans or database schema.
@@ -48,28 +50,41 @@ export function prescriptionFromLabel(label) {
 
 export function normalizePreferences(profile = {}) {
   const goal = normalize(profile.goal);
+  const location = normalize(profile.location);
+  const requestedEquipment = normalize(profile.equipment);
   const time = Number(profile.time || profile.availableMinutes);
   const spaceClass = normalizeSpaceClass(profile.location);
   const isCompact = spaceClass === SPACE_CLASSES.COMPACT;
   const isOpen = spaceClass === SPACE_CLASSES.OPEN;
+  const equipment = requestedEquipment === 'backpack'
+    ? 'Backpack'
+    : requestedEquipment === 'dumbbell' || requestedEquipment === 'dumbbells'
+      ? 'Dumbbell'
+      : requestedEquipment === 'resistance band'
+        ? 'Resistance Band'
+        : 'None';
   return {
     level: normalize(profile.level || profile.fitnessLevel) === 'intermediate' ? 'Intermediate' : 'Beginner',
     goal: goal.includes('strength') || goal.includes('muscle') ? 'strength' : goal.includes('weight') || goal.includes('fat') ? 'weight-management' : 'stay-fit',
     minutes: Number.isFinite(time) && time > 0 ? Math.max(5, Math.min(120, Math.round(time))) : 20,
-    equipment: normalize(profile.equipment) === 'backpack' ? 'Backpack' : 'None',
-    unsupportedEquipment: ['resistance band', 'dumbbells'].includes(normalize(profile.equipment)),
-    openSpace: isOpen,
+    equipment,
+    unsupportedEquipment: ['Resistance Band', 'Dumbbell'].includes(equipment),
+    equipmentFallback: ['Resistance Band', 'Dumbbell'].includes(equipment) ? equipment : null,
+    openSpace: isOpen || location === 'home',
     compactSpace: isCompact,
+    spaceLabel: location.includes('pg') ? 'PG Room' : location.includes('hostel') || location.includes('dorm') ? 'Hostel' : location === 'home' ? 'Home' : isOpen ? 'Open space' : 'Room',
     lowImpact: profile.lowImpact === true,
   };
 }
 
 export function isEligible(exercise, p) {
+  const exerciseEquipment = normalize(exercise.equipment || 'None');
+  const bodyweight = exerciseEquipment === 'none';
   return exercise.active !== false
     && (normalize(exercise.minLevel || 'Beginner') === 'beginner' || p.level === 'Intermediate' && normalize(exercise.minLevel) === 'intermediate')
-    && (normalize(exercise.equipment || 'None') === 'none' || normalize(exercise.equipment) === normalize(p.equipment))
+    && (bodyweight || exerciseEquipment === normalize(p.equipment))
     && (!p.lowImpact || normalize(exercise.impact || 'low') === 'low')
-    && (p.openSpace || (exercise.space || MOVEMENT_SPACE[exercise.id]) !== 'open');
+    && (p.openSpace || !(exercise.space || MOVEMENT_SPACE[exercise.id]));
 }
 
 export function recommendWorkout(profile = {}, catalogue = []) {
@@ -142,14 +157,14 @@ export function recommendWorkout(profile = {}, catalogue = []) {
     `${p.level} pacing: ${workSeconds}s work / ${restSeconds}s recovery intervals`,
     `${p.minutes} minutes including warm-up, recovery and cooldown`,
     replacedJumpingJacksForSpace
-      ? 'Jumping jacks replaced with marching to fit your compact room'
+      ? `Jumping jacks replaced with marching to fit your ${p.spaceLabel}`
       : p.openSpace
-        ? 'Open space: stepping and wider movements are eligible'
-        : 'Small space: no jumping or travelling lunges',
+        ? `${p.spaceLabel}: wider movements are eligible when impact preference allows`
+        : `${p.spaceLabel}: compact, low-travel movements only`,
     usesBackpack
       ? 'uses Backpack'
       : p.unsupportedEquipment
-        ? 'Bands and dumbbells are not supported yet; bodyweight plan'
+        ? `${p.equipmentFallback} movements are not in the current catalogue yet; using supported bodyweight movements`
         : p.equipment === 'Backpack'
           ? 'Bodyweight fits this goal and level; backpack not needed'
           : 'no equipment needed',
@@ -160,7 +175,7 @@ export function recommendWorkout(profile = {}, catalogue = []) {
   ];
 
   return {
-    title: `${p.minutes}-minute ${p.openSpace ? 'open-space' : 'small-space'} ${rounds > 1 ? `${rounds}-round circuit` : 'workout'}`,
+    title: `${p.minutes}-minute ${p.openSpace ? 'flexible-space' : 'small-space'} ${rounds > 1 ? `${rounds}-round circuit` : 'workout'}`,
     focus: p.goal === 'strength'
       ? 'Controlled strength intervals with longer recovery'
       : p.goal === 'weight-management'

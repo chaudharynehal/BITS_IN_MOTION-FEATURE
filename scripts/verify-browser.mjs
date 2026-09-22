@@ -40,7 +40,7 @@ let activeAccount = null;
 const failures = new Set();
 const fixtureProfile = (name) => ({
   displayName: name, age: '20', height: '175', weight: '70', level: 'Beginner',
-  goal: 'Stay fit', time: '20', location: 'Hostel room', equipment: 'None',
+  goal: 'Stay fit', time: '20', location: 'Hostel', equipment: 'None',
   lowImpact: false, leaderboardOptIn: false, leaderboardName: '',
 });
 const accounts = Object.fromEntries(['A', 'B'].map((key) => [key, {
@@ -231,8 +231,9 @@ try {
   }
   async function setFields(fields) {
     await evaluate('(() => { const fields = ' + JSON.stringify(fields) + '; for (const [name, value] of Object.entries(fields)) {'
-      + 'const el = document.querySelector("[name=" + name + "]"); if (!el) throw new Error("Missing field " + name);'
+      + 'let el = document.querySelector("[name=" + name + "]"); if (!el) throw new Error("Missing field " + name);'
       + 'if (el.type === "checkbox") { if (el.checked !== value) el.click(); continue; }'
+      + 'if (el.type === "radio") { el = document.querySelector("[name=" + name + "][value=" + JSON.stringify(String(value)) + "]"); if (!el) throw new Error("Missing option " + name + "=" + value); el.click(); continue; }'
       + 'const proto = el.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype;'
       + 'Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);'
       + 'el.dispatchEvent(new Event("input", {bubbles:true})); el.dispatchEvent(new Event("change", {bubbles:true})); } })()');
@@ -245,7 +246,7 @@ try {
     await setFields({ level: 'Beginner', goal: 'Stay fit' });
     await reviewWidths('profile-goal');
     await click('Continue');
-    await setFields({ time: '20', location: 'Hostel room', equipment: 'None' });
+    await setFields({ time: '20', location: 'Hostel', equipment: 'None' });
     await reviewWidths('profile-setup', true);
     if (optIn) {
       await setFields({ leaderboardOptIn: true });
@@ -833,6 +834,7 @@ try {
     await evaluate('[...document.querySelectorAll(".preview-exercise-tab")].find(el => el.textContent.includes("Push-ups")).click()');
     await ready(streamsStopped);
     await ready(() => evaluate('document.body.innerText.includes("Ready when you are")'));
+    assert(await evaluate('document.body.innerText.includes("Floor setup tip")'));
     await click('Start Camera');
     await ready(() => evaluate('Boolean(document.querySelector(".live-badge"))'));
     await click('End session');
@@ -869,6 +871,14 @@ try {
     assert(await evaluate('Boolean(document.querySelector(".rep-card"))'));
     assert(await evaluate('Boolean(document.querySelector(".button-danger"))'));
     assert(await evaluate('Boolean(document.querySelector(".coach-audio-toggle"))'));
+    const voiceSupported = await evaluate('!document.querySelector(".coach-audio-toggle").disabled');
+    if (voiceSupported) {
+      await evaluate('document.querySelector(".coach-audio-toggle").click()');
+      assert.equal(await evaluate('document.querySelector(".coach-audio-toggle").getAttribute("aria-pressed")'), 'true');
+      assert.equal(await evaluate('localStorage.getItem("bits-motion-voice-coach")'), 'true');
+      await evaluate('document.querySelector(".coach-audio-toggle").click()');
+      assert.equal(await evaluate('document.querySelector(".coach-audio-toggle").getAttribute("aria-pressed")'), 'false');
+    }
     const controlsRendered = await evaluate('(() => { const btn = document.querySelector(".button-danger"); const rep = document.querySelector(".rep-card"); const rBtn = btn.getBoundingClientRect(); const rRep = rep.getBoundingClientRect(); return rBtn.width > 0 && rBtn.height > 0 && rRep.width > 0 && rRep.height > 0; })()');
     assert(controlsRendered, 'Coach controls must be visible and fully rendered in mobile landscape');
     failures.add('sessions');
@@ -915,14 +925,14 @@ try {
     await click('Continue');
     await setFields({ level: 'Intermediate', goal: 'Build strength' });
     await click('Continue');
-    await setFields({ time: '10', location: 'Open indoor space', equipment: 'Backpack' });
+    await setFields({ time: '10', location: 'Home', equipment: 'Backpack' });
     await click('Save & refresh plan');
     await route('plan');
     const short = await evaluate('JSON.parse(localStorage.getItem("bits-motion-plan-v1"))');
     assert(short.exercises.some((item) => item.id === 'rows'));
     await openMenuAndClick('Fitness profile');
     await click('Continue'); await click('Continue');
-    await setFields({ time: '45', equipment: 'None', location: 'Hostel room', lowImpact: true });
+    await setFields({ time: '45', equipment: 'None', location: 'Hostel', lowImpact: true });
     await click('Save & refresh plan');
     await route('plan');
     const long = await evaluate('JSON.parse(localStorage.getItem("bits-motion-plan-v1"))');

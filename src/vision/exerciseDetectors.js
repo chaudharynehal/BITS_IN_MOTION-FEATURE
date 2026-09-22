@@ -1,5 +1,6 @@
 import { createSquatCounter, SQUAT_CONFIG } from './squatStateMachine';
 import { createCycleCounter } from './cycleStateMachine';
+import { createCrunchCounter, CRUNCH_CONFIG } from './crunchStateMachine';
 import { measureExercise } from './exerciseMeasurements';
 
 export const DETECTOR_CONFIGS = Object.freeze({
@@ -50,8 +51,8 @@ function classify(exerciseId, measurement) {
     return 'transition';
   }
   if (exerciseId === 'crunches') {
-    if (measurement.primaryValue >= 140) return 'extended';
-    if (measurement.primaryValue <= 105) return 'curled';
+    if (measurement.primaryValue >= CRUNCH_CONFIG.extendedAngle) return 'extended';
+    if (measurement.primaryValue <= CRUNCH_CONFIG.curledAngle) return 'curled';
     return 'transition';
   }
   if (exerciseId === 'jumping-jacks') {
@@ -66,14 +67,23 @@ function phaseLabel(exerciseId, phase) {
   const labels = {
     squats: { 'finding-standing': 'Finding start', standing: 'Standing', lowering: 'Lowering', down: 'Down position', rising: 'Standing up' },
     pushups: { 'finding-start': 'Finding start', top: 'Top position', moving: 'Lowering', bottom: 'Bottom position', returning: 'Pressing up' },
-    crunches: { 'finding-start': 'Finding start', extended: 'Extended', moving: 'Curling up', curled: 'Curled', returning: 'Returning' },
+    crunches: { 'finding-start': 'Finding start', extended: 'Extended', moving: 'Curling up', flexed: 'Curled', curled: 'Curled', returning: 'Returning' },
     'jumping-jacks': { 'finding-start': 'Finding start', closed: 'Closed position', moving: 'Opening', open: 'Open position', returning: 'Closing' },
   };
   return labels[exerciseId]?.[phase] || 'Tracking';
 }
 
 function feedbackFor(exerciseId, measurement, state) {
-  if (!measurement.valid) return { key: 'framing', message: 'Move back — keep your full body visible', tone: 'warning', priority: 6, holdMs: 900 };
+  if (!measurement.valid || measurement.framingReason && measurement.framingReason !== 'ready') {
+    const framing = {
+      'no-person': ['no-person', 'No person detected — step into view'],
+      'move-farther': ['move-farther', 'Move farther away — keep your whole body in frame'],
+      'move-closer': ['move-closer', 'Move a little closer so your joints are clear'],
+      'full-body': ['full-body', 'Full body not visible — adjust distance or camera tilt'],
+      'adjust-angle': ['adjust-angle', exerciseId === 'crunches' ? 'Set the camera low and side-on to your shoulders and hips' : 'Turn side-on and lower the camera angle'],
+    }[measurement.framingReason] || ['full-body', 'Full body not visible — adjust your camera'];
+    return { key: framing[0], message: framing[1], tone: 'warning', priority: 6, holdMs: 1300 };
+  }
   if (state.event === 'rep') return { key: 'great-rep', message: 'Great rep', tone: 'success', priority: 8, holdMs: 1200 };
 
   if (exerciseId === 'squats') {
@@ -88,7 +98,7 @@ function feedbackFor(exerciseId, measurement, state) {
     return { key: 'ready', message: state.phase === 'finding-start' ? 'Straighten your arms to begin' : 'Ready — lower with control', tone: 'neutral', priority: 1, holdMs: 650 };
   }
   if (exerciseId === 'crunches') {
-    if (state.event === 'target' || state.phase === 'curled') return { key: 'return', message: 'Good curl — return with control', tone: 'success', priority: 7, holdMs: 850 };
+    if (state.event === 'target' || state.phase === 'curled' || state.phase === 'flexed') return { key: 'return', message: 'Good curl — return with control', tone: 'success', priority: 7, holdMs: 850 };
     if (state.phase === 'moving' && measurement.primaryValue < 125) return { key: 'curl-more', message: 'Curl slightly further', tone: 'warning', priority: 4, holdMs: 750 };
     return { key: 'ready', message: state.phase === 'finding-start' ? 'Extend your torso to begin' : 'Ready — curl with control', tone: 'neutral', priority: 1, holdMs: 650 };
   }
@@ -100,20 +110,51 @@ function feedbackFor(exerciseId, measurement, state) {
 export function createExerciseDetector(exerciseId = 'squats', options = {}) {
   const id = DETECTOR_CONFIGS[exerciseId] ? exerciseId : 'squats';
   const measurementProvider = options.measurementProvider || ((landmarks) => measureExercise(id, landmarks));
+  const shouldSmooth = !options.measurementProvider || options.smoothMeasurements === true;
   const counter = id === 'squats'
     ? createSquatCounter()
-    : createCycleCounter({
+    : id === 'crunches'
+      ? createCrunchCounter()
+      : createCycleCounter({
       startState: id === 'pushups' ? 'top' : id === 'crunches' ? 'extended' : 'closed',
       targetState: id === 'pushups' ? 'bottom' : id === 'crunches' ? 'curled' : 'open',
       minRepIntervalMs: id === 'jumping-jacks' ? 500 : 700,
     });
+  let measurementWindow = [];
+
+  function smoothMeasurement(measurement) {
+    if (!measurement.valid) {
+      measurementWindow = [];
+      return measurement;
+    }
+    measurementWindow.push(measurement);
+    if (measurementWindow.length > 5) measurementWindow.shift();
+    const numericMedian = (key) => {
+      const values = measurementWindow.map((item) => item[key]).filter(Number.isFinite).sort((a, b) => a - b);
+      return values.length ? values[Math.floor(values.length / 2)] : measurement[key];
+    };
+    const majority = (key) => measurementWindow.filter((item) => item[key]).length > measurementWindow.length / 2;
+    return {
+      ...measurement,
+      primaryValue: numericMedian('primaryValue'),
+      bodyAngle: numericMedian('bodyAngle'),
+      feetRatio: numericMedian('feetRatio'),
+      shoulderKneeRatio: numericMedian('shoulderKneeRatio'),
+      armsOpen: majority('armsOpen'),
+      armsClosed: majority('armsClosed'),
+      visibility: Math.min(...measurementWindow.map((item) => item.visibility ?? 0)),
+    };
+  }
 
   function update(landmarks, timestamp = performance.now()) {
-    const measurement = measurementProvider(landmarks);
+    const rawMeasurement = measurementProvider(landmarks);
+    const measurement = shouldSmooth ? smoothMeasurement(rawMeasurement) : rawMeasurement;
     const classification = classify(id, measurement);
     const state = id === 'squats'
       ? counter.update({ angle: measurement.primaryValue, visibility: measurement.visibility, timestamp })
-      : counter.update({ classification, visibility: measurement.visibility, timestamp });
+      : id === 'crunches'
+        ? counter.update({ angle: measurement.primaryValue, visibility: measurement.visibility, timestamp })
+        : counter.update({ classification, visibility: measurement.visibility, timestamp });
     return {
       ...state,
       phaseLabel: phaseLabel(id, state.phase),
@@ -126,7 +167,10 @@ export function createExerciseDetector(exerciseId = 'squats', options = {}) {
     id,
     config: DETECTOR_CONFIGS[id],
     update,
-    reset: () => counter.reset(),
+    reset: () => {
+      measurementWindow = [];
+      return counter.reset();
+    },
     snapshot: () => counter.snapshot(),
   };
 }

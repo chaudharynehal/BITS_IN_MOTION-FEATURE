@@ -55,6 +55,7 @@ export const PRIVACY_SECTIONS = [
       { lead: 'Google account:', text: ' your account identity, fitness profile, plans, and session results are stored in a Neon PostgreSQL database and accessed through the BITS in Motion server API.' },
       { lead: 'Session access:', text: ' signed-in access uses a signed, HttpOnly session cookie. A successful sign-out clears that cookie in the current browser.' },
       { lead: 'Camera Coach:', text: ' camera pixels remain in temporary browser memory and are not part of either storage path.' },
+      { lead: 'Voice Coach:', text: ' the optional on/off preference is stored in this browser. Spoken cues use the browser or device speech-synthesis feature; BITS in Motion does not capture microphone audio or send voice input to its server.' },
     ],
   },
   {

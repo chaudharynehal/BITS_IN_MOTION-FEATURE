@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Activity,
   ArrowRight,
@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Dumbbell,
   FileText,
-  Lightbulb,
   Play,
   RotateCcw,
   ScanLine,
@@ -23,9 +22,58 @@ import {
 import GoogleSignInButton from '../components/GoogleSignInButton';
 import UserMenu from '../components/UserMenu';
 
-function CameraCoachPreview({ onTryCoach }) {
+const SQUAT_PHASES = [
+  {
+    key: 'standing', label: 'Standing', angle: 171, cue: 'Ready — lower with control', rep: 12,
+    points: [[170, 48], [170, 76], [170, 98], [142, 94], [198, 94], [126, 137], [214, 137], [116, 176], [224, 176], [170, 166], [153, 164], [187, 164], [151, 222], [189, 222], [149, 281], [191, 281]],
+  },
+  {
+    key: 'descending', label: 'Descending', angle: 132, cue: 'Control the descent', rep: 12,
+    points: [[180, 58], [177, 85], [172, 108], [145, 104], [199, 108], [122, 139], [219, 143], [105, 169], [235, 173], [170, 183], [153, 181], [187, 184], [136, 226], [204, 228], [116, 281], [224, 281]],
+  },
+  {
+    key: 'depth', label: 'Squat depth', angle: 91, cue: 'Good depth — drive back up', rep: 12,
+    points: [[190, 76], [184, 102], [174, 124], [148, 118], [199, 126], [122, 141], [221, 148], [98, 157], [243, 164], [167, 207], [150, 203], [184, 210], [123, 224], [213, 229], [98, 280], [243, 280]],
+  },
+  {
+    key: 'ascending', label: 'Ascending', angle: 133, cue: 'Stand tall to finish the rep', rep: 12,
+    points: [[180, 58], [177, 85], [172, 108], [145, 104], [199, 108], [122, 139], [219, 143], [105, 169], [235, 173], [170, 183], [153, 181], [187, 184], [136, 226], [204, 228], [116, 281], [224, 281]],
+  },
+  {
+    key: 'complete', label: 'Rep complete', angle: 171, cue: 'Rep complete — strong control', rep: 13,
+    points: [[170, 48], [170, 76], [170, 98], [142, 94], [198, 94], [126, 137], [214, 137], [116, 176], [224, 176], [170, 166], [153, 164], [187, 164], [151, 222], [189, 222], [149, 281], [191, 281]],
+  },
+];
+
+function CameraCoachPreview() {
+  const [phaseIndex, setPhaseIndex] = useState(0);
+  const [reducedMotion, setReducedMotion] = useState(() => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReducedMotion(media.matches);
+    media.addEventListener?.('change', update);
+    return () => media.removeEventListener?.('change', update);
+  }, []);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setPhaseIndex(2);
+      return undefined;
+    }
+    const duration = phaseIndex === 0 || phaseIndex === 2 || phaseIndex === 4 ? 900 : 720;
+    const timer = window.setTimeout(() => setPhaseIndex((current) => (current + 1) % SQUAT_PHASES.length), duration);
+    return () => window.clearTimeout(timer);
+  }, [phaseIndex, reducedMotion]);
+
+  const phase = SQUAT_PHASES[phaseIndex];
+  const p = phase.points;
+  const limbPath = `M${p[3][0]} ${p[3][1]}L${p[5][0]} ${p[5][1]}L${p[7][0]} ${p[7][1]}M${p[4][0]} ${p[4][1]}L${p[6][0]} ${p[6][1]}L${p[8][0]} ${p[8][1]}M${p[10][0]} ${p[10][1]}L${p[12][0]} ${p[12][1]}L${p[14][0]} ${p[14][1]}M${p[11][0]} ${p[11][1]}L${p[13][0]} ${p[13][1]}L${p[15][0]} ${p[15][1]}`;
+  const skeletonPath = `M${p[1][0]} ${p[1][1]}L${p[2][0]} ${p[2][1]}L${p[9][0]} ${p[9][1]}M${p[3][0]} ${p[3][1]}L${p[2][0]} ${p[2][1]}L${p[4][0]} ${p[4][1]}M${p[3][0]} ${p[3][1]}L${p[5][0]} ${p[5][1]}L${p[7][0]} ${p[7][1]}M${p[4][0]} ${p[4][1]}L${p[6][0]} ${p[6][1]}L${p[8][0]} ${p[8][1]}M${p[10][0]} ${p[10][1]}L${p[12][0]} ${p[12][1]}L${p[14][0]} ${p[14][1]}M${p[11][0]} ${p[11][1]}L${p[13][0]} ${p[13][1]}L${p[15][0]} ${p[15][1]}`;
+  const torsoPath = `M${p[3][0]} ${p[3][1]}Q${p[2][0]} ${p[2][1] - 8} ${p[4][0]} ${p[4][1]}L${p[11][0]} ${p[11][1]}Q${p[9][0]} ${p[9][1] + 8} ${p[10][0]} ${p[10][1]}Z`;
+
   return (
-    <div className="product-visual" aria-label="Illustration of Camera Coach and pose tracking">
+    <div className="product-visual" aria-label="Animated illustration of Camera Coach tracking a complete squat">
       <span className="product-preview-label">Camera Coach · illustrative preview</span>
 
       <article className="visual-camera-card">
@@ -47,9 +95,9 @@ function CameraCoachPreview({ onTryCoach }) {
 
           <svg
             viewBox="0 0 340 310"
-            className="visual-pose-svg"
+            className={`visual-pose-svg squat-phase-${phase.key}`}
             role="img"
-            aria-label="Illustration of 33 MediaPipe pose landmarks tracking a squat"
+            aria-label={`Squat animation: ${phase.label}, knee angle ${phase.angle} degrees`}
           >
             <defs>
               <linearGradient id="pose-line-grad" x1="0" y1="0" x2="0" y2="1">
@@ -60,53 +108,40 @@ function CameraCoachPreview({ onTryCoach }) {
                 <stop offset="0%" stopColor="#ffd765" />
                 <stop offset="100%" stopColor="#ff9f43" />
               </linearGradient>
+              <radialGradient id="athlete-head" cx="35%" cy="28%" r="75%">
+                <stop offset="0%" stopColor="#2d5678" />
+                <stop offset="100%" stopColor="#102940" />
+              </radialGradient>
             </defs>
 
             {/* Stylized Body Geometry */}
-            <circle className="pose-body-fill" cx="170" cy="56" r="26" />
-            <path className="pose-body-torso" d="M140 88Q170 75 200 88L210 170Q170 186 130 170Z" />
-            <path className="pose-body-limbs" d="M143 101L104 148L60 176M197 101L236 148L280 176M147 170L112 224L76 278M193 170L228 224L264 278" />
+            <circle className="pose-body-fill" cx={p[0][0]} cy={p[0][1]} r="25" />
+            <path className="pose-body-torso" d={torsoPath} />
+            <path className="pose-body-limbs" d={limbPath} />
 
             {/* MediaPipe Skeletal Landmark Connections */}
             <path
               className="pose-skeleton-line"
-              d="M170 82L170 167M170 101L104 148L60 176M170 101L236 148L280 176M170 167L112 224L76 278M170 167L228 224L264 278"
+              d={skeletonPath}
             />
 
             {/* Knee Angle Biomechanical Measurement Indicator */}
             <path
               className="pose-angle-arc"
-              d="M136 200 A 30 30 0 0 1 126 238"
+              d={`M${p[12][0] - 15} ${p[12][1] - 17} A 28 28 0 0 1 ${p[12][0] + 8} ${p[12][1] + 20}`}
             />
-            <text x="135" y="222" className="pose-angle-label">88° (Depth OK)</text>
+            <text x={p[12][0] - 7} y={p[12][1] + 3} className="pose-angle-label">{phase.angle}°</text>
 
             {/* 33 Key Joint Landmark Nodes */}
-            {[
-              [170, 56], // nose/head
-              [170, 82], // neck
-              [170, 101], // sternum
-              [143, 101], // left shoulder
-              [197, 101], // right shoulder
-              [104, 148], // left elbow
-              [236, 148], // right elbow
-              [60, 176],  // left wrist
-              [280, 176], // right wrist
-              [170, 167], // mid hip
-              [147, 170], // left hip
-              [193, 170], // right hip
-              [112, 224], // left knee
-              [228, 224], // right knee
-              [76, 278],  // left ankle
-              [264, 278], // right ankle
-            ].map(([x, y]) => (
-              <circle className="pose-node-circle" cx={x} cy={y} r="5.5" key={x + '-' + y} />
+            {p.map(([x, y], index) => (
+              <circle className="pose-node-circle" cx={x} cy={y} r={index === 0 ? 4 : 5.5} key={index} />
             ))}
           </svg>
 
           {/* Real-time Angle & Stage Badge */}
           <div className="viewfinder-hud-metric">
             <span>Measurement</span>
-            <strong>88° <small>knee angle</small></strong>
+            <strong>{phase.angle}° <small>knee angle</small></strong>
           </div>
         </div>
 
@@ -114,18 +149,18 @@ function CameraCoachPreview({ onTryCoach }) {
         <div className="visual-hud-overlay">
           <div className="hud-feedback-pill">
             <CheckCircle2 size={16} className="text-teal" />
-            <span>Good depth — press back up to complete rep</span>
+            <span>{phase.cue}</span>
           </div>
 
           <div className="hud-reps-card">
             <div>
               <span className="hud-label">Example reps</span>
-              <strong>12 <small>/ 15</small></strong>
+              <strong>{phase.rep} <small>/ 15</small></strong>
             </div>
             <div className="hud-progress-bar">
-              <i style={{ width: '80%' }} />
+              <i style={{ width: `${Math.round(phase.rep / 15 * 100)}%` }} />
             </div>
-            <em>Stage: Ascending</em>
+            <em>Stage: {phase.label}</em>
           </div>
         </div>
 
@@ -148,20 +183,6 @@ function CameraCoachPreview({ onTryCoach }) {
         </div>
       </article>
 
-      {/* Companion Loop Highlight */}
-      <article className="visual-plan-chip">
-        <span className="eyebrow light">Daily loop</span>
-        <strong>Plan ➔ Move ➔ Improve</strong>
-      </article>
-
-      {/* Floating Tip Badge */}
-      <article className="visual-tip-chip">
-        <Lightbulb size={16} />
-        <div>
-          <strong>Camera Privacy:</strong>
-          <span>Frames never leave this device.</span>
-        </div>
-      </article>
     </div>
   );
 }

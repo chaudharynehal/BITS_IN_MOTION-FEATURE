@@ -12,11 +12,11 @@ const exercises = EXERCISE_SEED.map((exercise) => ({
 }));
 
 const profile = {
-  level: 'Beginner', goal: 'Stay fit', time: '20', location: 'Hostel room', equipment: 'None', lowImpact: false,
+  level: 'Beginner', goal: 'Stay fit', time: '20', location: 'Hostel', equipment: 'None', lowImpact: false,
 };
 
 describe('saved-account recommendation rules', () => {
-  it('matches client selection, order, targets and explanations for all 840 supported combinations', () => {
+  it('matches client selection, order, targets and explanations for every supported profile combination', () => {
     for (const level of PROFILE_OPTIONS.level) for (const goal of PROFILE_OPTIONS.goal)
       for (const time of PROFILE_OPTIONS.time) for (const equipment of PROFILE_OPTIONS.equipment)
         for (const lowImpact of [false, true]) for (const location of PROFILE_OPTIONS.location) {

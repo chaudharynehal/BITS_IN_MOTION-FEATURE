@@ -34,11 +34,13 @@ export const PROFILE_OPTIONS = {
   level: ['Beginner', 'Intermediate'],
   goal: ['Stay fit', 'Build strength', 'Support weight management'],
   time: ['10', '20', '30', '45', '60'],
-  location: ['Hostel room', 'Home', 'Open space / Gym', 'Open indoor space'],
-  equipment: ['None', 'Backpack'],
+  location: ['PG Room', 'Hostel', 'Home'],
+  equipment: ['None', 'Dumbbell', 'Resistance Band', 'Backpack'],
 };
 export const LEGACY_LOCATIONS = [
+  'Hostel room',
   'Open indoor space',
+  'Open space / Gym',
   'Campus',
   'PG room',
   'Outdoor',
@@ -48,8 +50,10 @@ export const LEGACY_LOCATIONS = [
 ];
 export const LEGACY_EQUIPMENT = ['Resistance band', 'Dumbbells'];
 export const LOCATION_LABELS = {
+  'PG Room': 'PG Room',
+  Hostel: 'Hostel',
   'Hostel room': 'Hostel / Dorm room (compact space)',
-  Home: 'Home / Apartment (standard space)',
+  Home: 'Home',
   'Open space / Gym': 'Open space / Gym (stepping & wider movements)',
   'Open indoor space': 'Open space / Gym (stepping & wider movements)',
   'PG room': 'PG room (compact space)',
@@ -58,6 +62,15 @@ export const LOCATION_LABELS = {
   Outdoor: 'Outdoor (open space)',
   'Park / outdoor ground': 'Outdoor / Park (open space)',
   Gym: 'Gym (open space)',
+};
+
+export const EQUIPMENT_LABELS = {
+  None: 'None / Bodyweight',
+  Dumbbell: 'Dumbbell',
+  'Resistance Band': 'Resistance Band',
+  Backpack: 'Backpack',
+  'Resistance band': 'Resistance Band (previous selection)',
+  Dumbbells: 'Dumbbells (previous selection)',
 };
 
 export function profileErrors(profile = {}) {

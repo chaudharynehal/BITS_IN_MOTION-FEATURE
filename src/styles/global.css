@@ -1164,42 +1164,6 @@ h1, h2, h3, p { overflow-wrap: break-word; }
 .pipeline-step { display: inline-flex; align-items: center; gap: 5px; color: #b8cde4; }
 .pipeline-arrow { color: #4384d8; font-size: .72rem; }
 
-.visual-plan-chip {
-  position: absolute;
-  top: 18px;
-  left: -22px;
-  padding: 10px 16px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, rgba(23,105,255,.92), rgba(12,65,166,.9));
-  border: 1px solid rgba(130,185,255,.35);
-  box-shadow: 0 16px 36px rgba(0,10,35,.4);
-  color: white;
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.visual-plan-chip strong { font-size: .75rem; }
-
-.visual-tip-chip {
-  position: absolute;
-  bottom: 12px;
-  right: -16px;
-  padding: 11px 16px;
-  border-radius: 16px;
-  background: rgba(7,27,56,.94);
-  border: 1px solid rgba(122,168,224,.3);
-  box-shadow: 0 18px 40px rgba(0,5,20,.45);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  z-index: 5;
-  max-width: 250px;
-}
-.visual-tip-chip svg { color: #ffd765; flex: 0 0 auto; }
-.visual-tip-chip strong { display: block; font-size: .68rem; color: #ffe082; }
-.visual-tip-chip span { font-size: .65rem; color: #a9bccc; }
-
 .button-accent {
   background: linear-gradient(135deg, #18b99a 0%, #109b80 100%);
   color: white;
@@ -2458,7 +2422,6 @@ h1, h2, h3, p { overflow-wrap: break-word; }
   .trust-subsection { padding-left: 14px; }
   .trust-page-footer { align-items: flex-start; flex-direction: column; }
   .feature-card { padding: 22px; }
-  .visual-plan-chip, .visual-tip-chip { display: none; }
   .auth-choice-options-grid { grid-template-columns: 1fr; }
 }
 
@@ -2489,4 +2452,139 @@ h1, h2, h3, p { overflow-wrap: break-word; }
   font-size: 0.86rem;
   color: #15803d;
   line-height: 1.45;
+}
+
+/* 2026 product-quality pass: motion preview, tile inputs and stable coach UI */
+.product-visual {
+  min-width: 0;
+  padding: 30px 18px 22px;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+.product-preview-label { top: 2px; right: 20px; }
+.visual-camera-card {
+  width: min(100%, 590px);
+  max-width: none;
+  box-shadow: 0 34px 90px rgba(0, 5, 18, .5), inset 0 1px rgba(255, 255, 255, .08);
+}
+.pose-body-fill,
+.pose-body-torso,
+.pose-body-limbs,
+.pose-skeleton-line,
+.pose-angle-arc,
+.pose-angle-label,
+.pose-node-circle {
+  transition: cx .64s cubic-bezier(.4, 0, .2, 1), cy .64s cubic-bezier(.4, 0, .2, 1),
+    x .64s cubic-bezier(.4, 0, .2, 1), y .64s cubic-bezier(.4, 0, .2, 1),
+    d .64s cubic-bezier(.4, 0, .2, 1), opacity .25s ease;
+}
+.pose-body-fill { fill: url(#athlete-head); }
+.pose-body-torso { fill: #173754; stroke: #35658a; stroke-width: 2.5; }
+.pose-body-limbs { stroke: #193c5b; stroke-width: 18; filter: drop-shadow(5px 8px 8px rgba(0,0,0,.28)); }
+.squat-phase-complete .pose-node-circle { animation: rep-node-celebrate .8s ease; }
+@keyframes rep-node-celebrate {
+  0%, 100% { filter: drop-shadow(0 0 6px #20e1be); }
+  45% { filter: drop-shadow(0 0 13px #8effea); }
+}
+
+.choice-field {
+  min-width: 0;
+  margin: 0 0 22px;
+  padding: 0;
+  border: 0;
+}
+.choice-field legend {
+  margin-bottom: 9px;
+  color: #32425b;
+  font-size: .72rem;
+  font-weight: 800;
+}
+.choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.choice-field-compact .choice-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.choice-tile {
+  min-width: 0;
+  min-height: 68px;
+  padding: 12px 13px;
+  position: relative;
+  border: 1px solid #d8e2ef;
+  border-radius: 15px;
+  background: #f9fbfe;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.choice-tile:hover { border-color: #a9c8f8; background: #f4f8ff; transform: translateY(-1px); }
+.choice-tile.selected { border-color: #1769ff; background: #edf4ff; box-shadow: 0 0 0 2px rgba(23,105,255,.1); }
+.choice-tile input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.choice-tile:has(input:focus-visible) { outline: 3px solid rgba(23,105,255,.32); outline-offset: 2px; }
+.choice-check {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
+  margin-top: 1px;
+  border: 1.5px solid #b6c4d7;
+  border-radius: 50%;
+  color: white;
+  display: grid;
+  place-items: center;
+}
+.choice-tile.selected .choice-check { border-color: var(--blue); background: var(--blue); }
+.choice-copy { min-width: 0; display: grid; gap: 3px; }
+.choice-copy strong { color: var(--navy); font-size: .73rem; line-height: 1.25; }
+.choice-copy small { color: var(--muted); font-size: .6rem; line-height: 1.35; }
+.catalogue-note {
+  margin: -7px 0 18px;
+  padding: 11px 13px;
+  border: 1px solid #ead6b6;
+  border-radius: 13px;
+  color: #765a2e;
+  background: #fff9ed;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: .65rem;
+  line-height: 1.45;
+}
+.catalogue-note svg { flex: 0 0 auto; margin-top: 1px; }
+
+.coach-audio-toggle:disabled { opacity: .55; cursor: not-allowed; }
+.coach-ready-indicator { max-width: calc(100% - 32px); line-height: 1.35; }
+
+@media (max-width: 900px) {
+  .product-visual { padding-inline: 0; }
+  .visual-camera-card { width: min(100%, 640px); }
+}
+
+@media (max-width: 640px) {
+  .choice-grid, .choice-field-compact .choice-grid { grid-template-columns: 1fr; }
+  .choice-field-compact .choice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .choice-field-compact .choice-tile { min-height: 48px; align-items: center; padding: 9px; }
+  .choice-field-compact .choice-copy small { display: none; }
+  .choice-tile { min-height: 62px; }
+  .product-visual { min-height: 430px; padding-top: 22px; }
+  .visual-card-top { height: auto; min-height: 50px; padding: 9px 12px; gap: 8px; }
+  .camera-live-tag, .camera-exercise-tag { padding: 5px 7px; font-size: .58rem; }
+  .visual-viewfinder { height: 250px; }
+  .visual-pose-svg { height: 240px; }
+  .hud-reps-card { grid-template-columns: auto 1fr; }
+  .hud-reps-card em { grid-column: 1 / -1; }
+  .visual-pipeline-ribbon { gap: 5px; padding-inline: 10px; }
+  .pipeline-step span { font-size: .56rem; }
+  .pipeline-arrow { display: none; }
+  .coach-ready-indicator { border-radius: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pose-body-fill,
+  .pose-body-torso,
+  .pose-body-limbs,
+  .pose-skeleton-line,
+  .pose-angle-arc,
+  .pose-angle-label,
+  .pose-node-circle,
+  .choice-tile { transition: none; animation: none; }
+  .viewfinder-scanline, .camera-live-dot { animation: none; }
 }

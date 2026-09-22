@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Info, Ruler, Save, Scale, ShieldCheck, Target, Trophy, UserRound } from 'lucide-react';
 import ScreenHeader from '../components/ScreenHeader';
 import { calculateBmi, getBmiLabel } from '../utils/bmi';
-import { PROFILE_OPTIONS as OPTIONS, LOCATION_LABELS, LEGACY_EQUIPMENT, profileErrors as validate } from '../../shared/profile.js';
+import { EQUIPMENT_LABELS, PROFILE_OPTIONS as OPTIONS, LOCATION_LABELS, LEGACY_EQUIPMENT, profileErrors as validate } from '../../shared/profile.js';
 
 
 const STEPS = [
@@ -17,17 +17,59 @@ const STEP_FIELDS = [
   ['time', 'location', 'equipment', 'leaderboardName'],
 ];
 
-function SelectField({ label, name, value, onChange, options, error }) {
+const OPTION_HINTS = {
+  Beginner: 'New or returning to exercise',
+  Intermediate: 'Comfortable with regular workouts',
+  'Stay fit': 'Balanced strength and conditioning',
+  'Build strength': 'More controlled strength work',
+  'Support weight management': 'Conditioning with supporting strength',
+  'PG Room': 'Smallest-space, low-travel setup',
+  Hostel: 'Compact indoor student space',
+  Home: 'More flexible room to move',
+  None: 'No gear needed',
+  Dumbbell: 'Saved for supported catalogue movements',
+  'Resistance Band': 'Saved for supported catalogue movements',
+  Backpack: 'Unlocks backpack rows when suitable',
+};
+
+function choiceLabel(name, option) {
+  if (name === 'time') return `${option} min`;
+  if (name === 'location') return LOCATION_LABELS[option] || option;
+  if (name === 'equipment') return EQUIPMENT_LABELS[option] || option;
+  return option;
+}
+
+function ChoiceTiles({ label, name, value, onChange, options, error, compact = false }) {
+  const available = value && !options.includes(value) ? [value, ...options] : options;
   return (
-    <label className="form-field">
-      <span>{label}</span>
-      <select name={name} value={value} onChange={onChange} aria-invalid={Boolean(error)} aria-describedby={error ? name + '-error' : undefined}>
-        <option value="">Select</option>
-        {value && !options.includes(value) && <option value={value}>{value}{name === 'time' ? ' minutes' : ' (previous selection)'}</option>}
-        {options.map((option) => <option value={option} key={option}>{name === 'time' ? option + ' minutes' : name === 'location' ? LOCATION_LABELS[option] || option : option}</option>)}
-      </select>
+    <fieldset className={`choice-field ${compact ? 'choice-field-compact' : ''}`}>
+      <legend>{label}</legend>
+      <div className="choice-grid">
+        {available.map((option) => {
+          const selected = value === option;
+          const previous = !options.includes(option);
+          return (
+            <label className={`choice-tile ${selected ? 'selected' : ''}`} key={option}>
+              <input
+                type="radio"
+                name={name}
+                value={option}
+                checked={selected}
+                onChange={onChange}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? name + '-error' : undefined}
+              />
+              <span className="choice-check" aria-hidden="true">{selected && <Check size={14} />}</span>
+              <span className="choice-copy">
+                <strong>{choiceLabel(name, option)}{previous ? ' · previous' : ''}</strong>
+                {OPTION_HINTS[option] && <small>{OPTION_HINTS[option]}</small>}
+              </span>
+            </label>
+          );
+        })}
+      </div>
       {error && <small id={name + '-error'} className="field-error">{error}</small>}
-    </label>
+    </fieldset>
   );
 }
 
@@ -128,10 +170,8 @@ export default function ProfileScreen({ initialProfile, signedIn, demoMode, acco
           {step === 1 && (
             <section className="onboarding-section">
               <div className="section-title"><Target size={20} /><div><h2>Your goal</h2><p>Choose the closest fit. Recommendations remain easy to understand.</p></div></div>
-              <div className="form-grid">
-                <SelectField label="Fitness level" name="level" value={profile.level} onChange={handleChange} options={OPTIONS.level} error={errors.level} />
-                <SelectField label="Primary goal" name="goal" value={profile.goal} onChange={handleChange} options={OPTIONS.goal} error={errors.goal} />
-              </div>
+              <ChoiceTiles label="Fitness level" name="level" value={profile.level} onChange={handleChange} options={OPTIONS.level} error={errors.level} />
+              <ChoiceTiles label="Primary goal" name="goal" value={profile.goal} onChange={handleChange} options={OPTIONS.goal} error={errors.goal} />
               <div className="goal-preview">
                 <Target size={23} /><div><strong>{profile.goal || 'Your goal shapes the plan'}</strong><span>We adjust the mix and explain why every recommendation was selected.</span></div>
               </div>
@@ -141,13 +181,11 @@ export default function ProfileScreen({ initialProfile, signedIn, demoMode, acco
           {step === 2 && (
             <section className="onboarding-section">
               <div className="section-title"><Trophy size={20} /><div><h2>Your setup</h2><p>Tell us the time and space you can actually use.</p></div></div>
-              <div className="form-grid">
-                <SelectField label="Available time" name="time" value={profile.time} onChange={handleChange} options={OPTIONS.time} error={errors.time} />
-                <SelectField label="Workout setting" name="location" value={profile.location} onChange={handleChange} options={OPTIONS.location} error={errors.location} />
-                <SelectField label="Available equipment" name="equipment" value={profile.equipment} onChange={handleChange} options={OPTIONS.equipment} error={errors.equipment} />
-              </div>
-              <p className="field-help">Choose open space only when you have room to step and extend your arms. No GPS or address is collected. Backpack exercises are available for intermediate strength and general-fitness plans.</p>
-              {LEGACY_EQUIPMENT.includes(profile.equipment) && <p className="field-help" role="status">Your saved {profile.equipment.toLowerCase()} preference is retained, but this catalogue currently supports bodyweight and backpack movements only. This selection produces a bodyweight plan.</p>}
+              <ChoiceTiles compact label="Available time" name="time" value={profile.time} onChange={handleChange} options={OPTIONS.time} error={errors.time} />
+              <ChoiceTiles label="Workout setting" name="location" value={profile.location} onChange={handleChange} options={OPTIONS.location} error={errors.location} />
+              <ChoiceTiles label="Available equipment" name="equipment" value={profile.equipment} onChange={handleChange} options={OPTIONS.equipment} error={errors.equipment} />
+              <p className="field-help">No GPS or address is collected. Home can include wider movements; PG Room and Hostel plans stay compact. Backpack rows are used only when your level and goal make them appropriate.</p>
+              {([...LEGACY_EQUIPMENT, 'Dumbbell', 'Resistance Band'].includes(profile.equipment)) && <p className="catalogue-note" role="status"><Info size={15} /> Your {String(profile.equipment).toLowerCase()} preference is saved. The current verified catalogue does not yet include a matching movement, so this plan safely uses supported bodyweight exercises.</p>}
               <div className="preference-stack">
                 <label className="toggle-row"><input type="checkbox" name="lowImpact" checked={Boolean(profile.lowImpact)} onChange={handleChange} /><span><strong>Prefer low-impact movements</strong><small>Excludes jumping and moderate-impact movements. This is not a medical safety assessment.</small></span></label>
                 <label className={'toggle-row ' + (!signedIn ? 'disabled' : '')}><input type="checkbox" name="leaderboardOptIn" checked={Boolean(profile.leaderboardOptIn)} onChange={handleChange} disabled={!signedIn} /><span><strong>Join the community leaderboard</strong><small>Optional. Only your chosen alias and workout totals are shown.</small></span></label>

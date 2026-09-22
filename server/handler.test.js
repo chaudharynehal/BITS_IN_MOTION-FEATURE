@@ -592,7 +592,7 @@ describe('Saved plans and ownership', () => {
     expect(created.status).toBe(200);
     expect(created.body.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(created.body.exercises.map((exercise) => exercise.id)).toEqual([
-      'warmup', 'squats', 'marching', 'pushups', 'crunches', 'cooldown',
+      'warmup', 'squats', 'jumping-jacks', 'pushups', 'crunches', 'cooldown',
     ]);
     expect(state.plans).toHaveLength(1);
     expect(state.planItems.map((item) => item.position)).toEqual([0, 1, 2, 3, 4, 5]);
