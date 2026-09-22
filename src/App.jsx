@@ -13,6 +13,8 @@ import WorkoutLibraryScreen from './screens/WorkoutLibraryScreen';
 import FeaturesScreen from './screens/FeaturesScreen';
 import HowItWorksScreen from './screens/HowItWorksScreen';
 import TermsScreen from './screens/TermsScreen';
+import PrivacyScreen from './screens/PrivacyScreen';
+import HealthDisclaimerScreen from './screens/HealthDisclaimerScreen';
 import { api } from './services/api';
 import { estimateCalories, getExerciseMet } from './utils/calories';
 import {
@@ -757,6 +759,8 @@ export default function App() {
       {screen === 'features' && <FeaturesScreen onNavigate={handleNavigate} onStartCoach={handleStartCoach} appActive={appActive} hasProfile={hasProfile} />}
       {screen === 'how-it-works' && <HowItWorksScreen onNavigate={handleNavigate} onStartCoach={handleStartCoach} appActive={appActive} hasProfile={hasProfile} />}
       {screen === 'terms' && <TermsScreen onNavigate={handleNavigate} appActive={appActive} hasProfile={hasProfile} />}
+      {screen === 'privacy' && <PrivacyScreen onNavigate={handleNavigate} appActive={appActive} hasProfile={hasProfile} />}
+      {screen === 'health-disclaimer' && <HealthDisclaimerScreen onNavigate={handleNavigate} appActive={appActive} hasProfile={hasProfile} />}
       {screen === 'dashboard' && <DashboardScreen displayName={displayName} profile={profile} plan={plan} planState={planState} sessions={sessions} progressState={progressState} onRetryProgress={refreshSessions} onRetryPlan={handleRetryPlan} persistenceMode={persistenceMode} onNavigate={handleNavigate} onStartCoach={handleStartCoach} onCreatePlan={handleCreatePlan} />}
       {screen === 'workouts' && <WorkoutLibraryScreen onStartCoach={handleStartCoach} onNavigate={handleNavigate} />}
       {screen === 'profile' && <ProfileScreen key={auth.status + '-' + (hasProfile ? 'edit' : 'new')} initialProfile={profileDraft || profile} signedIn={signedIn} demoMode={demoMode} accountName={auth.user?.name} hasExistingProfile={hasProfile} onDraftChange={setProfileDraft} onSubmit={handleProfileSubmit} onBack={() => appActive && hasProfile ? navigate('dashboard') : goBack()} />}

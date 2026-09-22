@@ -147,8 +147,6 @@ h1, h2, h3, p { overflow-wrap: break-word; }
 .welcome-copy h1 { color: white; font-size: clamp(3rem, 6.6vw, 6.6rem); line-height: .92; max-width: 810px; margin: 24px 0 28px; }
 .welcome-copy p { color: #acbad0; max-width: 650px; }
 .status-pill.dark { color: #88ead7; background: rgba(24,185,154,.11); border-color: rgba(98,229,207,.25); }
-.camera-guided-cta { appearance: none; transition: color .16s ease, background .16s ease, border-color .16s ease; }
-.camera-guided-cta:hover { color: white; background: rgba(24,185,154,.2); border-color: rgba(98,229,207,.5); }
 .welcome-actions { margin: 38px 0 0; }
 .flow-preview { position: relative; min-height: 320px; display: grid; align-items: center; }
 .flow-card { background: rgba(255,255,255,.075); border: 1px solid rgba(255,255,255,.13); backdrop-filter: blur(16px); border-radius: 28px; }
@@ -736,6 +734,24 @@ h1, h2, h3, p { overflow-wrap: break-word; }
 }
 .marketing-nav nav button:hover { color: white; background: rgba(255,255,255,.07); }
 .marketing-nav > .account-menu { justify-self: end; }
+.marketing-nav-actions { justify-self: end; display: flex; align-items: center; }
+.nav-signin-button {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.2);
+  background: rgba(255,255,255,.08);
+  color: white;
+  font-size: .8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .16s ease;
+}
+.nav-signin-button:hover {
+  background: rgba(255,255,255,.18);
+  border-color: rgba(255,255,255,.35);
+  transform: translateY(-1px);
+}
 .marketing-hero-grid {
   width: min(1390px, 100%);
   min-height: 620px;
@@ -796,6 +812,96 @@ h1, h2, h3, p { overflow-wrap: break-word; }
 .returning-state > div:nth-child(2) { display: grid; gap: 3px; }
 .returning-state span { color: #8fa0b6; font-size: .66rem; font-weight: 700; }
 .returning-state strong { font-size: .88rem; }
+
+.auth-choice-card.auth-choice-expanded {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+  padding: 22px 24px;
+  background: linear-gradient(135deg, rgba(255,255,255,.11), rgba(255,255,255,.06));
+  border: 1px solid rgba(135,170,220,.35);
+  box-shadow: 0 16px 40px rgba(0, 5, 20, .3);
+  animation: page-rise .22s ease both;
+}
+.auth-choice-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.auth-choice-header strong {
+  font-size: .96rem;
+  color: white;
+}
+.auth-choice-header span {
+  font-size: .78rem;
+  color: #9facbf;
+}
+.auth-choice-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.auth-option-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(7, 22, 47, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 16px;
+  gap: 8px;
+  position: relative;
+  transition: border-color .15s ease, background .15s ease;
+}
+.auth-option-card:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(7, 22, 47, 0.65);
+}
+.auth-option-badge {
+  align-self: flex-start;
+  font-size: .62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(37, 126, 255, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+}
+.auth-option-badge.guest {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.3);
+}
+.auth-option-card h4 {
+  margin: 0;
+  font-size: .92rem;
+  font-weight: 700;
+  color: white;
+}
+.auth-option-card p {
+  margin: 0;
+  font-size: .76rem;
+  color: #9facbf;
+  line-height: 1.45;
+  flex: 1;
+}
+.auth-option-action {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+}
+.auth-option-action .google-button-wrap {
+  width: 100%;
+}
+.auth-option-action .google-button-wrap > div {
+  width: 100% !important;
+}
+.auth-option-action .guest-continue-button {
+  width: 100%;
+  min-height: 38px;
+}
 
 .product-visual { min-height: 570px; position: relative; }
 .product-preview-label { position: absolute; top: -17px; right: 0; color: #acbbd0; font-size: .6rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -1951,6 +2057,76 @@ h1, h2, h3, p { overflow-wrap: break-word; }
 .terms-section.highlight-border {
   border-left: 4px solid #f59e0b;
 }
+.terms-section.highlight-border-teal {
+  border-left: 4px solid #14b8a6;
+}
+.terms-section.highlight-border-amber {
+  border-left: 4px solid #f59e0b;
+}
+
+/* Trust & Safety Sub-Navigation */
+.trust-subnav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.trust-subnav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: .82rem;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.trust-subnav-pill:hover {
+  border-color: #cbd5e1;
+  color: var(--navy);
+  background: #f8fafc;
+}
+.trust-subnav-pill.active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: white;
+  box-shadow: 0 4px 12px rgba(7, 22, 47, 0.12);
+}
+
+.privacy-page, .health-page {
+  animation: page-rise .28s ease both;
+}
+
+/* Privacy Screen Notice and Accent Box */
+.privacy-notice-box {
+  background: #f0fdfa;
+  border-color: #99f6e4;
+  color: #115e59;
+}
+.privacy-notice-box .terms-notice-icon {
+  color: #0d9488;
+}
+.privacy-notice-box .terms-notice-body p {
+  color: #0f766e;
+}
+
+/* Health Screen Notice and Accent Box */
+.health-notice-box {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+.health-notice-box .terms-notice-icon {
+  color: #d97706;
+}
+.health-notice-box .terms-notice-body p {
+  color: #b45309;
+}
 
 .terms-section-header {
   display: flex;
@@ -2095,4 +2271,5 @@ h1, h2, h3, p { overflow-wrap: break-word; }
   .terms-section { padding: 20px; }
   .feature-card { padding: 22px; }
   .visual-plan-chip, .visual-tip-chip { display: none; }
+  .auth-choice-options-grid { grid-template-columns: 1fr; }
 }

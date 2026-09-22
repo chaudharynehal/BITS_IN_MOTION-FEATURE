@@ -182,14 +182,19 @@ export default function WelcomeScreen({
   onNavigate,
 }) {
   const authRef = useRef(null);
+  const [showAuthChooser, setShowAuthChooser] = useState(false);
   const authenticationBusy = ['checking', 'signing-in', 'signing-out'].includes(auth.status);
   const hasActiveAccount = ['signed-in', 'guest', 'demo'].includes(auth.status);
+  const isAuthChooserVisible = showAuthChooser || Boolean(auth.error);
 
-  function scrollToAuth() {
-    authRef.current?.scrollIntoView({
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      block: 'start',
-    });
+  function openAuthChooser() {
+    setShowAuthChooser(true);
+    setTimeout(() => {
+      authRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'nearest',
+      });
+    }, 50);
   }
 
   function handleCameraClick() {
@@ -216,26 +221,34 @@ export default function WelcomeScreen({
             <button type="button" onClick={() => onNavigate('terms')}>Terms & Conditions</button>
             {hasActiveAccount && <button type="button" onClick={onProgress}>Progress</button>}
           </nav>
-          <UserMenu
-            user={auth.user}
-            status={auth.status}
-            displayName={displayName}
-            onNavigate={onNavigate}
-            onSignOut={onSignOut}
-            onExitGuest={onExitGuest}
-            dark
-          />
+          {hasActiveAccount ? (
+            <UserMenu
+              user={auth.user}
+              status={auth.status}
+              displayName={displayName}
+              onNavigate={onNavigate}
+              onSignOut={onSignOut}
+              onExitGuest={onExitGuest}
+              dark
+            />
+          ) : (
+            <div className="marketing-nav-actions">
+              <button
+                type="button"
+                className="nav-signin-button"
+                onClick={openAuthChooser}
+              >
+                Sign in
+              </button>
+            </div>
+          )}
         </header>
 
         <div className="marketing-hero-grid">
           <div className="marketing-copy">
-            <button
-              className="status-pill dark camera-guided-cta"
-              type="button"
-              onClick={handleCameraClick}
-            >
-              <Camera size={16} /> Camera-guided movement
-            </button>
+            <span className="status-pill dark">
+              <Sparkles size={15} /> Built for Hostel & Student Spaces
+            </span>
             <h1>Your hostel-friendly fitness <em>companion</em></h1>
             <p>
               Build a practical workout plan for limited student spaces, then use privacy-first camera coaching for real-time rep counting and observable pose feedback.
@@ -245,9 +258,9 @@ export default function WelcomeScreen({
               <button
                 className="button button-primary button-large"
                 type="button"
-                onClick={hasActiveAccount ? onContinue : scrollToAuth}
+                onClick={hasActiveAccount ? onContinue : openAuthChooser}
               >
-                {hasActiveAccount ? (hasProfile ? 'Continue as ' + (displayName || 'Guest') : 'Continue fitness setup') : 'Set up my fitness journey'} <ArrowRight size={19} />
+                {hasActiveAccount ? 'Continue my journey' : 'Set up my fitness journey'} <ArrowRight size={19} />
               </button>
               <button
                 className="button button-accent button-large camera-hero-btn"
@@ -272,8 +285,8 @@ export default function WelcomeScreen({
               </button>
             </div>
 
-            <div className="auth-choice-card" ref={authRef}>
-              {hasActiveAccount ? (
+            {hasActiveAccount && (
+              <div className="auth-choice-card" ref={authRef}>
                 <div className="returning-state">
                   <div className="returning-avatar"><UserRound size={22} /></div>
                   <div>
@@ -284,35 +297,52 @@ export default function WelcomeScreen({
                     {hasProfile ? 'Open dashboard' : 'Continue setup'} <ArrowRight size={17} />
                   </button>
                 </div>
-              ) : (
-                <>
-                  <div className="auth-choice-actions">
-                    <GoogleSignInButton
-                      onCredential={onGoogleCredential}
-                      disabled={!auth.accountSyncAvailable || authenticationBusy}
-                    />
-                    <span className="auth-or">or</span>
-                    <button
-                      className="guest-continue-button"
-                      type="button"
-                      onClick={onContinueGuest}
-                      disabled={['signing-in', 'signing-out'].includes(auth.status)}
-                    >
-                      <UserRound size={17} /> Continue as Guest
-                    </button>
+              </div>
+            )}
+
+            {!hasActiveAccount && isAuthChooserVisible && (
+              <div className="auth-choice-card auth-choice-expanded" ref={authRef}>
+                <div className="auth-choice-header">
+                  <strong>Choose how to continue</strong>
+                  <span>Start your personalized routine or test locally without signing in.</span>
+                </div>
+                <div className="auth-choice-options-grid">
+                  <div className="auth-option-card">
+                    <div className="auth-option-badge">Cloud Sync</div>
+                    <h4>Google Account</h4>
+                    <p>Save your profile, plans and progress to your account.</p>
+                    <div className="auth-option-action">
+                      <GoogleSignInButton
+                        onCredential={onGoogleCredential}
+                        disabled={!auth.accountSyncAvailable || authenticationBusy}
+                      />
+                    </div>
+                    {!auth.accountSyncAvailable && auth.status !== 'checking' && (
+                      <small className="setup-note">Cloud sign-in is currently unavailable.</small>
+                    )}
                   </div>
-                  <div className="auth-choice-copy">
-                    <strong>Choose how to continue</strong>
-                    <small>Google securely syncs your private profile and history. Guest progress stays only in this browser.</small>
+
+                  <div className="auth-option-card">
+                    <div className="auth-option-badge guest">Private & Local</div>
+                    <h4>Guest Mode</h4>
+                    <p>Continue locally without signing in.</p>
+                    <div className="auth-option-action">
+                      <button
+                        className="guest-continue-button"
+                        type="button"
+                        onClick={onContinueGuest}
+                        disabled={['signing-in', 'signing-out'].includes(auth.status)}
+                      >
+                        <UserRound size={17} /> Continue as Guest
+                      </button>
+                    </div>
+                    <small className="setup-note">Stored in local browser storage only.</small>
                   </div>
-                  {auth.status === 'checking' && <small className="setup-note">Checking for a returning account…</small>}
-                  {!auth.accountSyncAvailable && auth.status !== 'checking' && (
-                    <small className="setup-note">Guest mode is available even while cloud sign-in is unavailable.</small>
-                  )}
-                  {auth.error && <small className="auth-error">{auth.error}</small>}
-                </>
-              )}
-            </div>
+                </div>
+                {auth.status === 'checking' && <small className="setup-note checking">Checking for a returning account…</small>}
+                {auth.error && <small className="auth-error">{auth.error}</small>}
+              </div>
+            )}
           </div>
 
           <CameraCoachPreview onTryCoach={handleCameraClick} />
@@ -418,8 +448,8 @@ export default function WelcomeScreen({
           <div className="footer-nav-col">
             <strong>Trust & Safety</strong>
             <button type="button" onClick={() => onNavigate('terms')}>Terms & Conditions</button>
-            <button type="button" onClick={() => onNavigate('terms')}>Privacy Policy</button>
-            <button type="button" onClick={() => onNavigate('terms')}>Health Disclaimer</button>
+            <button type="button" onClick={() => onNavigate('privacy')}>Privacy Policy</button>
+            <button type="button" onClick={() => onNavigate('health-disclaimer')}>Health Disclaimer</button>
           </div>
         </div>
 

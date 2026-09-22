@@ -10,6 +10,8 @@ export const APP_SCREENS = new Set([
   'features',
   'how-it-works',
   'terms',
+  'privacy',
+  'health-disclaimer',
   'preview',
 ]);
 
@@ -19,6 +21,8 @@ export const PUBLIC_SCREENS = new Set([
   'features',
   'how-it-works',
   'terms',
+  'privacy',
+  'health-disclaimer',
   'preview',
 ]);
 
