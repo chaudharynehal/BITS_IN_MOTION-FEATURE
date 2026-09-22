@@ -38,33 +38,35 @@ Do not rebuild the project from scratch.
 15. Prefer focused production-quality modifications over large speculative rewrites.
 16. Update PROJECT_STATE.md after significant work.
 
-## Git / Agent Handoff
+## Multi-Agent Protocol
 
-This repository may be worked on by multiple coding agents, primarily Codex and Gemini.
+This repository is worked on cooperatively by multiple coding agents, primarily **Codex**, **Gemini / Antigravity**, and **Claude Code**.
 
 The shared source of truth is:
-
 - the actual repository
-- Git history
+- Git history (authoritative for live HEAD)
 - AGENTS.md
-- PROJECT_STATE.md
+- PROJECT_STATE.md (authoritative for project/handoff state)
 
-Before continuing work after another agent:
+### START OF SESSION
+- Read `PROJECT_STATE.md` first to understand current progress and active objectives. (`PROJECT_STATE.md` is authoritative for project/handoff state).
+- Determine the live repository state using Git (Git is authoritative for live HEAD):
+  - `git status`
+  - `git rev-parse HEAD`
+  - `git log -5 --oneline`
+- Confirm current HEAD before modifying anything.
+- Preserve work from other agents — never overwrite another agent's working implementation simply because it was created by a different agent.
 
-1. Read AGENTS.md.
-2. Read PROJECT_STATE.md.
-3. Run git status.
-4. Inspect recent git log.
-5. Inspect recent commits/diffs.
-6. Inspect affected source files.
-7. Run appropriate verification/build commands.
-
-Never overwrite another agent's working implementation simply because it was created by a different agent.
+### END OF MEANINGFUL WORK
+- Run appropriate tests/build (`npm test`, `npm run build`, and `node scripts/verify-browser.mjs` when UI/flows change).
+- Update `PROJECT_STATE.md`.
+- Record exactly what changed, what was tested, and what remains.
+- Note meaningful application/deployment checkpoints (stored commit hashes describe meaningful checkpoints, not necessarily docs-only commits).
+- Never claim deployment/testing occurred unless actually verified against the live environment.
 
 ## Handoff Documentation
 
-After significant development work, update PROJECT_STATE.md with:
-
+After significant development work, update `PROJECT_STATE.md` with:
 - what was changed
 - which files were affected
 - decisions made
