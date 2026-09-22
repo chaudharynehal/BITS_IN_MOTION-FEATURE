@@ -21,6 +21,7 @@ import {
   Users,
 } from 'lucide-react';
 import ScreenHeader from '../components/ScreenHeader';
+import PublicInfoNav from '../components/PublicInfoNav';
 
 const JOURNEY_STEPS = [
   {
@@ -42,10 +43,10 @@ const JOURNEY_STEPS = [
     icon: ClipboardCheck,
     summary: 'Input your fitness parameters and physical hostel/home constraints.',
     points: [
-      'Physical metrics: Display name, age, height, and weight for accurate calorie calculations.',
-      'Fitness parameters: Select your primary goal (e.g. Stay Fit, Build Muscle) and experience level (Beginner to Advanced).',
-      'Environment & Equipment: Specify your available time (15–45m), room location, and available gear (none, resistance bands, or dumbbells).',
-      'Joint health: Toggle Low-Impact mode to protect knees and joints from jumping stress.',
+      'Profile details: Your name personalizes the app; age checks eligibility, height and weight provide BMI, and weight contributes to calorie estimates.',
+      'Fitness parameters: Choose Stay fit, Build strength or Support weight management, and Beginner or Intermediate experience.',
+      'Environment & Equipment: Choose 10–60 minutes, small or open space, and bodyweight or backpack movements.',
+      'Impact preference: Exclude jumping and moderate-impact movements. This does not determine medical suitability.',
     ],
   },
   {
@@ -67,7 +68,7 @@ const JOURNEY_STEPS = [
     icon: Play,
     summary: 'Follow clear exercise instructions tailored for minimal equipment.',
     points: [
-      'Dorm-friendly movements: Exercises are designed for small footprints without disturbing roommates.',
+      'Space-aware movements: Small-space plans exclude jumping and travelling lunges. Check clearance before moving.',
       'Self-guided or AI-assisted: Complete sets independently or activate camera guidance for supported movements.',
       'Target muscle visibility: Review primary and secondary muscle groups before starting.',
     ],
@@ -81,7 +82,7 @@ const JOURNEY_STEPS = [
     points: [
       'Zero cloud streaming: Video frames are evaluated entirely in browser memory; no frames are recorded or uploaded.',
       'Biomechanical angle tracking: Knee angles for squats, elbow angles for push-ups, torso flexion for crunches, and stance width for jumping jacks.',
-      'Live feedback cues: Get instant voice/visual reminders to reach depth, maintain posture, or fix camera framing.',
+      'Live feedback cues: Get visual reminders to reach depth, maintain posture, or fix camera framing.',
       'Automated repetition counting: State machines verify each complete, visibility-qualified repetition.',
     ],
   },
@@ -105,8 +106,8 @@ const JOURNEY_STEPS = [
     summary: 'Track your long-term consistency and celebrate incremental wins.',
     points: [
       'Activity streaks: Rolling 7-day indicators highlight weekly consistency.',
-      'Historical archives: Inspect all past workouts, reps, and active duration.',
-      'Opt-in campus leaderboard: Optionally compete on workouts and reps using a private alias—never body weight or photos.',
+      'Recent history: Inspect saved camera sessions, reps and session duration; accounts load the latest 50 sessions.',
+      'Opt-in campus leaderboard: Optionally compete on workouts and reps using a public alias—never body weight or photos.',
     ],
   },
 ];
@@ -123,7 +124,7 @@ export default function HowItWorksScreen({ onNavigate, onStartCoach, appActive, 
             <button
               className="button button-primary"
               type="button"
-              onClick={() => (onStartCoach ? onStartCoach('squats', 'how-it-works') : onNavigate('coach'))}
+              onClick={() => appActive && hasProfile ? onStartCoach('squats', 'how-it-works') : onNavigate('preview')}
             >
               <Camera size={18} /> Try Camera Coach
             </button>
@@ -137,6 +138,8 @@ export default function HowItWorksScreen({ onNavigate, onStartCoach, appActive, 
           </div>
         }
       />
+
+      <PublicInfoNav current="how-it-works" onNavigate={onNavigate} />
 
       {/* 7-Step Journey Timeline */}
       <div className="journey-timeline">

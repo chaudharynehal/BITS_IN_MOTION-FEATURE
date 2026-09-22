@@ -5,13 +5,26 @@ async function request(action, options = {}) {
     'X-Bits-Motion-Request': '1',
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),
   };
-  const response = await fetch(`/api?${query}`, {
-    method,
-    credentials: 'same-origin',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  const payload = await response.json().catch(() => ({}));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  let response;
+  let payload;
+  try {
+    response = await fetch(`/api?${query}`, {
+      method,
+      credentials: 'same-origin',
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+    payload = await response.json();
+  } catch (error) {
+    throw new Error(controller.signal.aborted ? 'The request timed out. Check your connection and try again.'
+      : error instanceof SyntaxError ? 'The server response could not be read. Please try again.'
+        : 'Unable to connect. Check your connection and try again.');
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) {
     const error = new Error(payload.error || 'The request could not be completed.');
     error.status = response.status;
@@ -29,7 +42,8 @@ export const api = {
   saveProfile: (profile) => request('profile', { method: 'PUT', body: profile }),
   generatePlan: () => request('plan', { method: 'POST' }),
   latestPlan: () => request('plan'),
-  sessions: () => request('sessions'),
+  sessions: (query) => request('sessions', { query }),
+  sessionsSummary: () => request('sessions-summary'),
   saveSession: (session) => request('sessions', { method: 'POST', body: session }),
   leaderboard: (period = 'week') => request('leaderboard', { query: { period } }),
 };

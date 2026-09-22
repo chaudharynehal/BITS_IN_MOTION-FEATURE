@@ -3,6 +3,7 @@ export const APP_SCREENS = new Set([
   'workouts',
   'plan',
   'coach',
+  'self-guided',
   'result',
   'progress',
   'leaderboard',

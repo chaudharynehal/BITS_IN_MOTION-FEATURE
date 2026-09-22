@@ -15,10 +15,12 @@ import HowItWorksScreen from './screens/HowItWorksScreen';
 import TermsScreen from './screens/TermsScreen';
 import PrivacyScreen from './screens/PrivacyScreen';
 import HealthDisclaimerScreen from './screens/HealthDisclaimerScreen';
+import SelfGuidedScreen from './screens/SelfGuidedScreen';
 import { api } from './services/api';
 import { estimateCalories, getExerciseMet } from './utils/calories';
 import {
   createJudgeDemoHistory,
+  guestStorageWarning,
   isGuestModeActive,
   loadGuestPlan,
   loadGuestProfile,
@@ -31,6 +33,9 @@ import {
 import { buildWorkoutImpact } from './utils/workoutImpact';
 import { generateWorkoutPlan } from './utils/workoutRecommendation';
 import { APP_SCREENS, PUBLIC_SCREENS, historyDepth, resolveRequestedScreen, screenFromHash } from './utils/navigation';
+import { profileErrors } from '../shared/profile.js';
+import { getCircuitRounds } from '../shared/recommendation.js';
+import { EXERCISES } from './data/exercises.js';
 
 const CoachScreen = lazy(() => import('./screens/CoachScreen'));
 
@@ -75,17 +80,7 @@ function normalizeProfile(profile, user) {
 }
 
 function profileIsComplete(profile) {
-  return Boolean(
-    String(profile?.displayName || '').trim()
-    && Number(profile?.age)
-    && Number(profile?.height)
-    && Number(profile?.weight)
-    && profile?.level
-    && profile?.goal
-    && profile?.time
-    && profile?.location
-    && profile?.equipment,
-  );
+  return Boolean(profile) && Object.keys(profileErrors(profile)).length === 0;
 }
 
 function requestedScreen() {
@@ -131,6 +126,58 @@ function sessionPayload(result) {
   };
 }
 
+export function buildWorkoutSequence(plan) {
+  if (!plan?.exercises?.length) return [];
+  const warmup = plan.exercises.find((e) => e.id === 'warmup');
+  const cooldown = plan.exercises.find((e) => e.id === 'cooldown');
+  const stations = plan.exercises.filter((e) => !['warmup', 'cooldown'].includes(e.id));
+  const rounds = plan.rounds || getCircuitRounds(plan.totalMinutes);
+
+  if (rounds <= 1 || stations.length === 0) {
+    return plan.exercises.map((e) => ({ ...e, round: 1, totalRounds: 1, sequenceLabel: e.name }));
+  }
+
+  const sequence = [];
+  if (warmup) {
+    sequence.push({ ...warmup, round: 1, totalRounds: rounds, sequenceLabel: 'Mobility warm-up' });
+  }
+
+  for (let r = 1; r <= rounds; r += 1) {
+    for (const station of stations) {
+      sequence.push({
+        ...station,
+        key: `${station.id}-r${r}`,
+        round: r,
+        totalRounds: rounds,
+        sets: 1,
+        duration: `1 set · ${station.workSeconds || 30}s work / ${station.restSeconds || 30}s recovery`,
+        sequenceLabel: `Round ${r} of ${rounds} · ${station.name}`,
+        estimatedSeconds: (station.workSeconds || 30) + (station.restSeconds || 30),
+      });
+    }
+  }
+
+  if (cooldown) {
+    sequence.push({ ...cooldown, round: rounds, totalRounds: rounds, sequenceLabel: 'Cooldown & breathing' });
+  }
+  return sequence;
+}
+
+function readStoredActiveWorkout() {
+  try {
+    const stored = sessionStorage.getItem('bits-motion-active-workout');
+    const parsed = stored ? JSON.parse(stored) : null;
+    return parsed?.exercises?.length ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function restoredCurrentMovement() {
+  const workout = readStoredActiveWorkout();
+  return workout ? workout.exercises[Math.max(0, Math.min(workout.currentIndex, workout.exercises.length - 1))] : null;
+}
+
 export default function App() {
   const [screen, setScreen] = useState('welcome');
   const [profile, setProfile] = useState(() => normalizeProfile(null));
@@ -140,10 +187,43 @@ export default function App() {
   const [planErrorAction, setPlanErrorAction] = useState('load');
   const [result, setResult] = useState(null);
   const [sessions, setSessions] = useState([]);
+  const [sessionSummary, setSessionSummary] = useState(null);
   const [progressState, setProgressState] = useState('idle');
   const [resultSaveState, setResultSaveState] = useState('idle');
-  const [activeExerciseId, setActiveExerciseId] = useState('squats');
-  const [coachReturnScreen, setCoachReturnScreen] = useState('dashboard');
+  // Restore the in-progress movement's identity from the persisted active workout so a
+  // mid-workout refresh reopens the same exercise the "Movement X of N" label describes,
+  // instead of silently falling back to the defaults below.
+  const [activeExerciseId, setActiveExerciseId] = useState(() => {
+    const movement = restoredCurrentMovement();
+    return movement?.cameraSupported ? movement.id : 'squats';
+  });
+  const [coachReturnScreen, setCoachReturnScreen] = useState(() => (readStoredActiveWorkout() ? 'plan' : 'dashboard'));
+  const [activeWorkout, setActiveWorkout] = useState(readStoredActiveWorkout);
+  const [isWorkoutComplete, setIsWorkoutComplete] = useState(false);
+
+  // A guided workout stays in `activeWorkout` while the user wanders off to practice an
+  // unrelated movement (e.g. from the Workout Library). Only treat the screen currently
+  // open as "part of the workout" when it matches the workout's own current step —
+  // otherwise an ad-hoc session would show a false "Movement X of N" label, a Skip button
+  // that silently advances the real workout, or a false completion celebration.
+  function currentWorkoutMovementFor(exerciseId) {
+    return activeWorkout && activeWorkout.exercises[activeWorkout.currentIndex]?.id === exerciseId ? activeWorkout : null;
+  }
+
+  useEffect(() => {
+    try {
+      if (activeWorkout) {
+        sessionStorage.setItem('bits-motion-active-workout', JSON.stringify(activeWorkout));
+      } else {
+        sessionStorage.removeItem('bits-motion-active-workout');
+      }
+    } catch {}
+  }, [activeWorkout]);
+  const [selfGuidedExerciseId, setSelfGuidedExerciseId] = useState(() => {
+    const movement = restoredCurrentMovement();
+    return movement && !movement.cameraSupported ? movement.id : 'warmup';
+  });
+  const [selfGuidedReturnScreen, setSelfGuidedReturnScreen] = useState('plan');
   const [auth, setAuth] = useState({ status: 'checking', user: null, accountSyncAvailable: false, error: '' });
   const [showLaunch, setShowLaunch] = useState(() => {
     try {
@@ -155,6 +235,15 @@ export default function App() {
   const accountRevision = useRef(0);
   const activeResultId = useRef(null);
   const pendingProtectedScreen = useRef(null);
+
+  useEffect(() => {
+    if (showLaunch) return;
+    const heading = document.querySelector('main h1');
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    }
+  }, [screen, showLaunch]);
 
   const routeTo = useCallback((nextScreen, { replace = false } = {}) => {
     setScreen(nextScreen);
@@ -196,11 +285,14 @@ export default function App() {
     setProfileDraft(null);
     pendingProtectedScreen.current = null;
     setSessions([]);
+    setSessionSummary(null);
     setProgressState('idle');
     setPlan(null);
     setPlanState('idle');
     setResult(null);
     setResultSaveState('idle');
+    setActiveWorkout(null);
+    setIsWorkoutComplete(false);
   }, []);
 
   const activateGuestMode = useCallback(({ accountSyncAvailable = false, error = '', markActive = true } = {}) => {
@@ -210,12 +302,14 @@ export default function App() {
     let guestPlan = loadGuestPlan();
     if (profileIsComplete(guestProfile) && !guestPlan) {
       guestPlan = { ...generateWorkoutPlan(guestProfile), createdAt: new Date().toISOString() };
-      saveGuestPlan(guestPlan);
+      if (!guestStorageWarning()) saveGuestPlan(guestPlan);
     }
-    setAuth({ status: 'guest', user: null, accountSyncAvailable, error });
+    const guestSessions = loadGuestSessions();
+    setAuth({ status: 'guest', user: null, accountSyncAvailable, error: error || guestStorageWarning() });
     setProfile(guestProfile);
     setProfileDraft(null);
-    setSessions(loadGuestSessions());
+    setSessions(guestSessions);
+    setSessionSummary(null);
     setProgressState('ready');
     setPlan(guestPlan);
     setPlanState('ready');
@@ -228,8 +322,18 @@ export default function App() {
     setProgressState('loading');
     setPlanState('loading');
     setPlanErrorAction('load');
-    const [sessionsResult, planResult] = await Promise.allSettled([api.sessions(), api.latestPlan()]);
+    const [sessionsResult, planResult, summaryResult] = await Promise.allSettled([
+      api.sessions(),
+      api.latestPlan(),
+      api.sessionsSummary(),
+    ]);
     if (accountRevision.current !== revision) return;
+
+    if (summaryResult.status === 'fulfilled') {
+      setSessionSummary(summaryResult.value);
+    } else {
+      setSessionSummary(null);
+    }
 
     const errors = [];
     if (sessionsResult.status === 'fulfilled') {
@@ -258,9 +362,13 @@ export default function App() {
       const revision = accountRevision.current;
       setProgressState('loading');
       try {
-        const remoteSessions = await api.sessions();
+        const [remoteSessions, summary] = await Promise.all([
+          api.sessions(),
+          api.sessionsSummary().catch(() => null),
+        ]);
         if (accountRevision.current === revision) {
           setSessions(remoteSessions);
+          if (summary) setSessionSummary(summary);
           setProgressState('ready');
           setAuth((current) => ({ ...current, error: '' }));
         }
@@ -268,6 +376,7 @@ export default function App() {
       } catch (error) {
         if (accountRevision.current === revision) {
           setSessions([]);
+          setSessionSummary(null);
           setProgressState('error');
           setAuth((current) => ({ ...current, error: 'Progress could not sync: ' + error.message }));
         }
@@ -428,9 +537,12 @@ export default function App() {
     setAuth((current) => ({ status: 'demo', user: null, accountSyncAvailable: current.accountSyncAvailable, error: '' }));
     setProfile(JUDGE_PROFILE);
     setSessions(createJudgeDemoHistory());
+    setSessionSummary(null);
     setProgressState('ready');
     setPlan(generateWorkoutPlan(JUDGE_PROFILE));
     setPlanState('ready');
+    setActiveWorkout(null);
+    setIsWorkoutComplete(false);
     routeTo('dashboard');
     return true;
   }, [auth.user, auth.status, routeTo]);
@@ -466,6 +578,8 @@ export default function App() {
     setPlan(null);
     setPlanState('loading');
     setResult(null);
+    setActiveWorkout(null);
+    setIsWorkoutComplete(false);
     setAuth((current) => ({ ...current, status: 'signing-in', user: null, error: '' }));
 
     try {
@@ -506,6 +620,8 @@ export default function App() {
     setPlanState('idle');
     setResult(null);
     setResultSaveState('idle');
+    setActiveWorkout(null);
+    setIsWorkoutComplete(false);
     routeTo('welcome');
 
     try {
@@ -634,9 +750,97 @@ export default function App() {
       navigate('profile');
       return;
     }
+    const exercise = Object.values(EXERCISES).find((item) => item.id === exerciseId);
+    if (exerciseId && !exercise?.cameraSupported) {
+      handleStartSelfGuided(exerciseId, returnScreen);
+      return;
+    }
     setActiveExerciseId(exerciseId || 'squats');
     setCoachReturnScreen(APP_SCREENS.has(returnScreen) && returnScreen !== 'coach' ? returnScreen : 'dashboard');
     routeTo('coach');
+  }
+
+  function handleStartSelfGuided(exerciseId, returnScreen = screen) {
+    if (!profileIsComplete(profile)) {
+      navigate('profile');
+      return;
+    }
+    setSelfGuidedExerciseId(exerciseId || 'warmup');
+    setSelfGuidedReturnScreen(APP_SCREENS.has(returnScreen) && returnScreen !== 'self-guided' ? returnScreen : 'dashboard');
+    routeTo('self-guided');
+  }
+
+  function handleStartWorkout(targetPlan = plan, startIndex = 0) {
+    if (!profileIsComplete(profile)) {
+      navigate('profile');
+      return;
+    }
+    const currentPlan = targetPlan || plan;
+    if (!currentPlan?.exercises?.length) {
+      navigate('plan');
+      return;
+    }
+    const exercises = buildWorkoutSequence(currentPlan);
+    const index = Math.max(0, Math.min(startIndex, exercises.length - 1));
+    const workout = {
+      planId: currentPlan.id || 'current',
+      planTitle: currentPlan.title,
+      exercises,
+      currentIndex: index,
+      completedList: [],
+      startedAt: new Date().toISOString(),
+    };
+    setActiveWorkout(workout);
+    setIsWorkoutComplete(false);
+    const movement = exercises[index];
+    if (movement.cameraSupported) {
+      handleStartCoach(movement.id, 'plan');
+    } else {
+      handleStartSelfGuided(movement.id, 'plan');
+    }
+  }
+
+  function handleContinueWorkout() {
+    if (!activeWorkout) return;
+    const nextIndex = activeWorkout.currentIndex + 1;
+    if (nextIndex >= activeWorkout.exercises.length) {
+      setIsWorkoutComplete(true);
+      setActiveWorkout(null);
+      routeTo('result');
+      return;
+    }
+    const updatedWorkout = {
+      ...activeWorkout,
+      currentIndex: nextIndex,
+    };
+    setActiveWorkout(updatedWorkout);
+    const nextMovement = activeWorkout.exercises[nextIndex];
+    if (nextMovement.cameraSupported) {
+      handleStartCoach(nextMovement.id, 'plan');
+    } else {
+      handleStartSelfGuided(nextMovement.id, 'plan');
+    }
+  }
+
+  function handleFinishWorkoutEarly() {
+    setActiveWorkout(null);
+    setIsWorkoutComplete(false);
+    routeTo('plan');
+  }
+
+  function handleSkipMovement() {
+    if (activeWorkout) {
+      const nextIndex = activeWorkout.currentIndex + 1;
+      if (nextIndex >= activeWorkout.exercises.length) {
+        setActiveWorkout(null);
+        setIsWorkoutComplete(false);
+        routeTo('plan');
+        return;
+      }
+      handleContinueWorkout();
+    } else {
+      goBack();
+    }
   }
 
   function handleNavigate(nextScreen) {
@@ -648,7 +852,11 @@ export default function App() {
   }
 
   const handleCoachBack = useCallback(() => {
-    if (coachReturnScreen && APP_SCREENS.has(coachReturnScreen) && coachReturnScreen !== 'coach') {
+    if (historyDepth(window.history.state) > 0) {
+      goBack();
+      return;
+    }
+    if (coachReturnScreen && APP_SCREENS.has(coachReturnScreen) && !['coach', 'self-guided'].includes(coachReturnScreen)) {
       navigate(coachReturnScreen);
       return;
     }
@@ -668,20 +876,36 @@ export default function App() {
       durationSeconds: sessionMetrics.durationSeconds,
       met: getExerciseMet(sessionMetrics.exerciseId),
     });
+    const workoutMovement = currentWorkoutMovementFor(sessionMetrics.exerciseId);
+    const isLastWorkoutMovement = Boolean(workoutMovement) && workoutMovement.currentIndex >= workoutMovement.exercises.length - 1;
     const nextResult = {
       ...sessionMetrics,
+      completedAt: new Date().toISOString(),
       clientSessionId: globalThis.crypto.randomUUID(),
       calories,
       impact: buildWorkoutImpact(sessionMetrics),
+      // Snapshot the completed workout's shape so the celebration message on the Result
+      // screen stays correct even after activeWorkout is cleared below (finishing the last
+      // movement must not leave a "resumable" workout pointing at an already-completed step).
+      ...(isLastWorkoutMovement ? {
+        completedWorkoutTotalSteps: workoutMovement.exercises.length,
+        completedWorkoutPlanTitle: workoutMovement.planTitle,
+      } : {}),
     };
     activeResultId.current = nextResult.clientSessionId;
     setResult(nextResult);
     setResultSaveState(auth.user ? 'saving' : 'idle');
+
+    if (isLastWorkoutMovement) {
+      setIsWorkoutComplete(true);
+      setActiveWorkout(null);
+    }
+
     routeTo('result');
 
     if (auth.status === 'signed-in' && auth.user) {
       const revision = accountRevision.current;
-      const payload = sessionPayload({ ...nextResult, completedAt: new Date().toISOString() });
+      const payload = sessionPayload(nextResult);
       api.saveSession(payload).then((savedSession) => {
         if (accountRevision.current !== revision || activeResultId.current !== nextResult.clientSessionId) return;
         setResult((current) => ({ ...current, id: savedSession.id }));
@@ -692,6 +916,78 @@ export default function App() {
         setResultSaveState('error');
         setAuth((current) => ({ ...current, error: 'Session sync paused: ' + error.message }));
       });
+    } else if (auth.status === 'guest') {
+      const guestSession = { ...nextResult, id: nextResult.clientSessionId, source: 'real' };
+      saveGuestSession(guestSession);
+      void refreshSessions();
+    } else if (auth.status === 'demo') {
+      const demoSession = { ...nextResult, id: nextResult.clientSessionId, source: 'sample' };
+      setSessions((current) => [demoSession, ...current]);
+    }
+  }
+
+  function handleEndSelfGuidedSession(metrics) {
+    const calories = estimateCalories({
+      weightKg: profile.weight,
+      durationSeconds: metrics.durationSeconds,
+      met: getExerciseMet(metrics.exerciseId),
+    });
+    const workoutMovement = currentWorkoutMovementFor(metrics.exerciseId);
+    const isLastWorkoutMovement = Boolean(workoutMovement) && workoutMovement.currentIndex >= workoutMovement.exercises.length - 1;
+    const nextResult = {
+      ...metrics,
+      reps: 0,
+      completedAt: new Date().toISOString(),
+      clientSessionId: globalThis.crypto.randomUUID(),
+      calories,
+      source: 'self-guided',
+      formSummary: `Completed self-guided session (${Math.max(1, Math.round(metrics.durationSeconds / 60))} min).`,
+      framingInterruptions: 0,
+      cueCounts: {},
+      movementMetrics: {},
+      impact: buildWorkoutImpact({
+        exerciseId: metrics.exerciseId,
+        reps: 0,
+        durationSeconds: metrics.durationSeconds,
+        cueCounts: {},
+      }),
+      // See handleEndSession for why this snapshot exists.
+      ...(isLastWorkoutMovement ? {
+        completedWorkoutTotalSteps: workoutMovement.exercises.length,
+        completedWorkoutPlanTitle: workoutMovement.planTitle,
+      } : {}),
+    };
+    activeResultId.current = nextResult.clientSessionId;
+    setResult(nextResult);
+    setResultSaveState(auth.user ? 'saving' : 'idle');
+
+    if (isLastWorkoutMovement) {
+      setIsWorkoutComplete(true);
+      setActiveWorkout(null);
+    }
+
+    routeTo('result');
+
+    if (auth.status === 'signed-in' && auth.user) {
+      const revision = accountRevision.current;
+      const payload = sessionPayload(nextResult);
+      api.saveSession(payload).then((savedSession) => {
+        if (accountRevision.current !== revision || activeResultId.current !== nextResult.clientSessionId) return;
+        setResult((current) => ({ ...current, id: savedSession.id }));
+        setResultSaveState('saved');
+        return refreshSessions();
+      }).catch((error) => {
+        if (accountRevision.current !== revision || activeResultId.current !== nextResult.clientSessionId) return;
+        setResultSaveState('error');
+        setAuth((current) => ({ ...current, error: 'Session sync paused: ' + error.message }));
+      });
+    } else if (auth.status === 'guest') {
+      const guestSession = { ...nextResult, id: nextResult.clientSessionId, source: 'self-guided' };
+      saveGuestSession(guestSession);
+      void refreshSessions();
+    } else if (auth.status === 'demo') {
+      const demoSession = { ...nextResult, id: nextResult.clientSessionId, source: 'sample' };
+      setSessions((current) => [demoSession, ...current]);
     }
   }
 
@@ -725,7 +1021,7 @@ export default function App() {
     }
 
     if (auth.status !== 'guest') return;
-    const guestSession = { ...completedResult, id: completedResult.clientSessionId, source: 'real' };
+    const guestSession = { ...completedResult, id: completedResult.clientSessionId, source: completedResult.source || 'real' };
     if (!saveGuestSession(guestSession)) {
       setResultSaveState('error');
       return;
@@ -745,11 +1041,11 @@ export default function App() {
   const hasProfile = profileIsComplete(profile);
   const persistenceMode = signedIn ? 'account' : demoMode ? 'demo' : 'guest';
   const displayName = profile.displayName || auth.user?.name || (demoMode ? 'Judge' : auth.status === 'guest' ? 'Guest' : '');
-  const showAppHeader = screen !== 'welcome' && screen !== 'coach' && screen !== 'preview';
-  const showShellNavigation = appActive && hasProfile && !['welcome', 'coach', 'preview'].includes(screen);
+  const showAppHeader = screen !== 'welcome' && screen !== 'coach' && screen !== 'preview' && screen !== 'self-guided';
+  const showShellNavigation = appActive && hasProfile && !['welcome', 'coach', 'preview', 'self-guided'].includes(screen);
 
   return (
-    <div className={'app ' + (['coach', 'preview'].includes(screen) ? 'app-coach ' : '') + (showShellNavigation ? 'app-with-nav' : '')}>
+    <div className={'app ' + (['coach', 'preview', 'self-guided'].includes(screen) ? 'app-coach ' : '') + (showShellNavigation ? 'app-with-nav' : '')}>
       {showLaunch && <LaunchScreen />}
       <div inert={showLaunch ? '' : undefined} aria-hidden={showLaunch || undefined}>
       {showAppHeader && <AppHeader screen={screen} showPrimaryNavigation={appActive && hasProfile} onBack={goBack} onHome={goHome} onNavigate={handleNavigate} user={auth.user} status={auth.status} displayName={displayName} onSignOut={handleSignOut} onExitGuest={handleExitGuest} />}
@@ -761,13 +1057,14 @@ export default function App() {
       {screen === 'terms' && <TermsScreen onNavigate={handleNavigate} appActive={appActive} hasProfile={hasProfile} />}
       {screen === 'privacy' && <PrivacyScreen onNavigate={handleNavigate} appActive={appActive} hasProfile={hasProfile} />}
       {screen === 'health-disclaimer' && <HealthDisclaimerScreen onNavigate={handleNavigate} appActive={appActive} hasProfile={hasProfile} />}
-      {screen === 'dashboard' && <DashboardScreen displayName={displayName} profile={profile} plan={plan} planState={planState} sessions={sessions} progressState={progressState} onRetryProgress={refreshSessions} onRetryPlan={handleRetryPlan} persistenceMode={persistenceMode} onNavigate={handleNavigate} onStartCoach={handleStartCoach} onCreatePlan={handleCreatePlan} />}
-      {screen === 'workouts' && <WorkoutLibraryScreen onStartCoach={handleStartCoach} onNavigate={handleNavigate} />}
+      {screen === 'dashboard' && <DashboardScreen displayName={displayName} profile={profile} plan={plan} planState={planState} sessions={sessions} sessionSummary={sessionSummary} progressState={progressState} onRetryProgress={refreshSessions} onRetryPlan={handleRetryPlan} persistenceMode={persistenceMode} onNavigate={handleNavigate} onStartCoach={handleStartCoach} onStartWorkout={handleStartWorkout} onCreatePlan={handleCreatePlan} />}
+      {screen === 'workouts' && <WorkoutLibraryScreen onStartCoach={handleStartCoach} onStartSelfGuided={(id) => handleStartSelfGuided(id, 'workouts')} onNavigate={handleNavigate} />}
       {screen === 'profile' && <ProfileScreen key={auth.status + '-' + (hasProfile ? 'edit' : 'new')} initialProfile={profileDraft || profile} signedIn={signedIn} demoMode={demoMode} accountName={auth.user?.name} hasExistingProfile={hasProfile} onDraftChange={setProfileDraft} onSubmit={handleProfileSubmit} onBack={() => appActive && hasProfile ? navigate('dashboard') : goBack()} />}
-      {screen === 'plan' && <PlanScreen profile={profile} plan={plan} sessions={sessions} progressState={progressState} onRetryProgress={refreshSessions} planState={planState} planErrorAction={planErrorAction} onRetryPlan={handleRetryPlan} onStartCoach={handleStartCoach} onCreatePlan={handleCreatePlan} onExplore={() => navigate('dashboard')} onBack={() => navigate('dashboard')} />}
-      {screen === 'coach' && <Suspense fallback={<main className="screen-page"><p role="status">Loading your camera coach…</p><button className="button button-quiet" onClick={handleCoachBack}>Back</button></main>}><CoachScreen exerciseId={activeExerciseId} onBack={handleCoachBack} onHome={goHome} onEndSession={handleEndSession} /></Suspense>}
-      {screen === 'result' && result && <ResultScreen result={result} profile={profile} saveState={resultSaveState} automaticSave={signedIn} onSave={handleSaveResult} onHome={() => navigate('dashboard')} onProgress={() => navigate('progress')} onRetry={() => handleStartCoach(activeExerciseId, 'result')} />}
-      {screen === 'progress' && <ProgressScreen sessions={sessions} loadState={progressState} persistenceMode={persistenceMode} onRetry={() => refreshSessions()} onHome={() => navigate('dashboard')} onStart={() => navigate('workouts')} />}
+      {screen === 'plan' && <PlanScreen profile={profile} plan={plan} sessions={sessions} progressState={progressState} onRetryProgress={refreshSessions} planState={planState} planErrorAction={planErrorAction} onRetryPlan={handleRetryPlan} onStartCoach={handleStartCoach} onStartSelfGuided={handleStartSelfGuided} onStartWorkout={handleStartWorkout} onResumeWorkout={handleContinueWorkout} activeWorkout={activeWorkout} onCreatePlan={handleCreatePlan} onExplore={() => navigate('dashboard')} onBack={() => navigate('dashboard')} />}
+      {screen === 'coach' && <Suspense fallback={<main className="screen-page"><p role="status">Loading your camera coach…</p><button className="button button-quiet" onClick={handleCoachBack}>Back</button></main>}><CoachScreen exerciseId={activeExerciseId} activeWorkout={currentWorkoutMovementFor(activeExerciseId)} onBack={handleCoachBack} onHome={goHome} onEndSession={handleEndSession} onSkip={handleSkipMovement} /></Suspense>}
+      {screen === 'self-guided' && <SelfGuidedScreen exercise={Object.values(EXERCISES).find((item) => item.id === selfGuidedExerciseId) || EXERCISES.warmup} activeWorkout={currentWorkoutMovementFor(selfGuidedExerciseId)} onComplete={handleEndSelfGuidedSession} onSkip={handleSkipMovement} onBack={handleCoachBack} onHome={goHome} />}
+      {screen === 'result' && result && <ResultScreen result={result} profile={profile} saveState={resultSaveState} automaticSave={signedIn} onSave={handleSaveResult} onHome={() => navigate('dashboard')} onProgress={() => navigate('progress')} onRetry={() => handleStartCoach(activeExerciseId, 'result')} activeWorkout={currentWorkoutMovementFor(result.exerciseId)} onContinueWorkout={handleContinueWorkout} onFinishWorkoutEarly={handleFinishWorkoutEarly} isWorkoutComplete={isWorkoutComplete} />}
+      {screen === 'progress' && <ProgressScreen sessions={sessions} sessionSummary={sessionSummary} loadState={progressState} persistenceMode={persistenceMode} onRetry={() => refreshSessions()} onHome={() => navigate('dashboard')} onStart={() => navigate('workouts')} />}
       {screen === 'leaderboard' && <LeaderboardScreen user={auth.user} accountSyncAvailable={auth.accountSyncAvailable} onHome={() => appActive ? navigate('dashboard') : routeTo('welcome')} />}
 
       {auth.error && showShellNavigation && <div className="sync-toast" role="status">{auth.error}</div>}

@@ -1,43 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Info, Ruler, Save, Scale, ShieldCheck, Target, Trophy, UserRound } from 'lucide-react';
 import ScreenHeader from '../components/ScreenHeader';
 import { calculateBmi, getBmiLabel } from '../utils/bmi';
+import { PROFILE_OPTIONS as OPTIONS, LOCATION_LABELS, LEGACY_EQUIPMENT, profileErrors as validate } from '../../shared/profile.js';
 
-const OPTIONS = {
-  level: ['Beginner', 'Intermediate'],
-  goal: ['Stay fit', 'Build strength', 'Support weight management'],
-  time: ['10', '20', '30'],
-  location: ['Hostel room', 'Home', 'Campus', 'PG room'],
-  equipment: ['None', 'Resistance band', 'Dumbbells', 'Backpack'],
-};
-
-const RULES = {
-  age: { min: 16, max: 80, label: 'Age' },
-  height: { min: 120, max: 230, label: 'Height' },
-  weight: { min: 30, max: 250, label: 'Weight' },
-};
 
 const STEPS = [
   { title: 'About you', icon: UserRound },
   { title: 'Your goal', icon: Target },
   { title: 'Your setup', icon: Trophy },
 ];
-
-function validate(profile) {
-  const errors = {};
-  const displayName = String(profile.displayName || '').trim();
-  if (!displayName || displayName.length > 80) errors.displayName = 'Enter a preferred name between 1 and 80 characters.';
-  Object.entries(RULES).forEach(([field, rule]) => {
-    const value = Number(profile[field]);
-    if (!Number.isFinite(value) || value < rule.min || value > rule.max) errors[field] = rule.label + ' must be between ' + rule.min + ' and ' + rule.max + '.';
-  });
-  if (!Number.isInteger(Number(profile.age))) errors.age = 'Enter your age in whole years.';
-  ['level', 'goal', 'time', 'location', 'equipment'].forEach((field) => {
-    if (!String(profile[field] || '').trim()) errors[field] = 'Please choose an option.';
-  });
-  if (profile.leaderboardOptIn && !String(profile.leaderboardName || '').trim()) errors.leaderboardName = 'Choose a public display name.';
-  return errors;
-}
 
 const STEP_FIELDS = [
   ['displayName', 'age', 'height', 'weight'],
@@ -49,11 +21,12 @@ function SelectField({ label, name, value, onChange, options, error }) {
   return (
     <label className="form-field">
       <span>{label}</span>
-      <select name={name} value={value} onChange={onChange} aria-invalid={Boolean(error)}>
+      <select name={name} value={value} onChange={onChange} aria-invalid={Boolean(error)} aria-describedby={error ? name + '-error' : undefined}>
         <option value="">Select</option>
-        {options.map((option) => <option value={option} key={option}>{name === 'time' ? option + ' minutes' : option}</option>)}
+        {value && !options.includes(value) && <option value={value}>{value}{name === 'time' ? ' minutes' : ' (previous selection)'}</option>}
+        {options.map((option) => <option value={option} key={option}>{name === 'time' ? option + ' minutes' : name === 'location' ? LOCATION_LABELS[option] || option : option}</option>)}
       </select>
-      {error && <small className="field-error">{error}</small>}
+      {error && <small id={name + '-error'} className="field-error">{error}</small>}
     </label>
   );
 }
@@ -64,7 +37,12 @@ export default function ProfileScreen({ initialProfile, signedIn, demoMode, acco
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const formRef = useRef(null);
   const bmi = useMemo(() => calculateBmi(profile.weight, profile.height), [profile.weight, profile.height]);
+
+  useEffect(() => {
+    if (Object.values(errors).some(Boolean)) formRef.current?.querySelector('[aria-invalid="true"]')?.focus();
+  }, [errors, step]);
 
   function handleChange(event) {
     const { name, value, type, checked } = event.target;
@@ -115,7 +93,7 @@ export default function ProfileScreen({ initialProfile, signedIn, demoMode, acco
       <ScreenHeader
         eyebrow={hasExistingProfile ? 'Fitness profile' : 'Personal setup'}
         title={hasExistingProfile ? 'Update what fits your routine' : 'Build a plan around your real day'}
-        description="Only the details used for recommendations are requested. You can update them anytime."
+        description="Your setup shapes the workout. Height and weight provide BMI and calorie estimates; age checks eligibility. You can update these anytime."
         onBack={handleBack}
       />
 
@@ -127,7 +105,7 @@ export default function ProfileScreen({ initialProfile, signedIn, demoMode, acco
       </div>
 
       <div className="profile-layout">
-        <form className="panel profile-form onboarding-form" onSubmit={handleSubmit} noValidate>
+        <form ref={formRef} className="panel profile-form onboarding-form" onSubmit={handleSubmit} noValidate aria-busy={saving}>
           <div className="profile-sync-state"><ShieldCheck size={17} /><span>{signedIn ? 'Your saved profile stays with your private account.' : demoMode ? 'Judge Demo stays temporary and isolated.' : 'Guest profile data stays only in this browser.'}</span></div>
 
           {step === 0 && (
@@ -135,14 +113,14 @@ export default function ProfileScreen({ initialProfile, signedIn, demoMode, acco
               <div className="section-title"><UserRound size={20} /><div><h2>About you</h2><p>We’ll use your preferred name throughout the app.</p></div></div>
               <label className="form-field preferred-name-field">
                 <span>Preferred name</span>
-                <input name="displayName" maxLength="80" autoComplete="name" placeholder="Enter your name" value={profile.displayName || ''} onChange={handleChange} aria-invalid={Boolean(errors.displayName)} />
+                <input name="displayName" maxLength="80" autoComplete="name" placeholder="Enter your name" value={profile.displayName || ''} onChange={handleChange} aria-invalid={Boolean(errors.displayName)} aria-describedby={errors.displayName ? 'displayName-error' : undefined} />
                 <small className="field-help">{signedIn && accountName ? 'Your Google name is a starting point—you can choose what the app calls you.' : 'First name or nickname is perfect.'}</small>
-                {errors.displayName && <small className="field-error">{errors.displayName}</small>}
+                {errors.displayName && <small id="displayName-error" className="field-error">{errors.displayName}</small>}
               </label>
               <div className="form-grid form-grid-three">
-                <label className="form-field"><span>Age</span><div className="input-with-unit"><input type="number" name="age" min="16" max="80" value={profile.age} onChange={handleChange} aria-invalid={Boolean(errors.age)} /><small>years</small></div>{errors.age && <small className="field-error">{errors.age}</small>}</label>
-                <label className="form-field"><span>Height</span><div className="input-with-unit"><Ruler size={17} /><input type="number" name="height" min="120" max="230" value={profile.height} onChange={handleChange} aria-invalid={Boolean(errors.height)} /><small>cm</small></div>{errors.height && <small className="field-error">{errors.height}</small>}</label>
-                <label className="form-field"><span>Weight</span><div className="input-with-unit"><Scale size={17} /><input type="number" name="weight" min="30" max="250" value={profile.weight} onChange={handleChange} aria-invalid={Boolean(errors.weight)} /><small>kg</small></div>{errors.weight && <small className="field-error">{errors.weight}</small>}</label>
+                <label className="form-field"><span>Age</span><div className="input-with-unit"><input type="number" name="age" min="16" max="80" value={profile.age} onChange={handleChange} aria-invalid={Boolean(errors.age)} aria-describedby={errors.age ? 'age-error' : undefined} /><small>years</small></div>{errors.age && <small id="age-error" className="field-error">{errors.age}</small>}</label>
+                <label className="form-field"><span>Height</span><div className="input-with-unit"><Ruler size={17} /><input type="number" name="height" min="120" max="230" value={profile.height} onChange={handleChange} aria-invalid={Boolean(errors.height)} aria-describedby={errors.height ? 'height-error' : undefined} /><small>cm</small></div>{errors.height && <small id="height-error" className="field-error">{errors.height}</small>}</label>
+                <label className="form-field"><span>Weight</span><div className="input-with-unit"><Scale size={17} /><input type="number" name="weight" min="30" max="250" value={profile.weight} onChange={handleChange} aria-invalid={Boolean(errors.weight)} aria-describedby={errors.weight ? 'weight-error' : undefined} /><small>kg</small></div>{errors.weight && <small id="weight-error" className="field-error">{errors.weight}</small>}</label>
               </div>
             </section>
           )}
@@ -165,17 +143,20 @@ export default function ProfileScreen({ initialProfile, signedIn, demoMode, acco
               <div className="section-title"><Trophy size={20} /><div><h2>Your setup</h2><p>Tell us the time and space you can actually use.</p></div></div>
               <div className="form-grid">
                 <SelectField label="Available time" name="time" value={profile.time} onChange={handleChange} options={OPTIONS.time} error={errors.time} />
-                <SelectField label="Workout location" name="location" value={profile.location} onChange={handleChange} options={OPTIONS.location} error={errors.location} />
+                <SelectField label="Workout setting" name="location" value={profile.location} onChange={handleChange} options={OPTIONS.location} error={errors.location} />
                 <SelectField label="Available equipment" name="equipment" value={profile.equipment} onChange={handleChange} options={OPTIONS.equipment} error={errors.equipment} />
               </div>
+              <p className="field-help">Choose open space only when you have room to step and extend your arms. No GPS or address is collected. Backpack exercises are available for intermediate strength and general-fitness plans.</p>
+              {LEGACY_EQUIPMENT.includes(profile.equipment) && <p className="field-help" role="status">Your saved {profile.equipment.toLowerCase()} preference is retained, but this catalogue currently supports bodyweight and backpack movements only. This selection produces a bodyweight plan.</p>}
               <div className="preference-stack">
-                <label className="toggle-row"><input type="checkbox" name="lowImpact" checked={Boolean(profile.lowImpact)} onChange={handleChange} /><span><strong>Prefer low-impact movements</strong><small>Recommendation rules will favour gentler alternatives.</small></span></label>
+                <label className="toggle-row"><input type="checkbox" name="lowImpact" checked={Boolean(profile.lowImpact)} onChange={handleChange} /><span><strong>Prefer low-impact movements</strong><small>Excludes jumping and moderate-impact movements. This is not a medical safety assessment.</small></span></label>
                 <label className={'toggle-row ' + (!signedIn ? 'disabled' : '')}><input type="checkbox" name="leaderboardOptIn" checked={Boolean(profile.leaderboardOptIn)} onChange={handleChange} disabled={!signedIn} /><span><strong>Join the community leaderboard</strong><small>Optional. Only your chosen alias and workout totals are shown.</small></span></label>
-                {profile.leaderboardOptIn && signedIn && <label className="form-field leaderboard-name-field"><span>Public leaderboard name</span><input name="leaderboardName" maxLength="40" value={profile.leaderboardName || ''} onChange={handleChange} aria-invalid={Boolean(errors.leaderboardName)} />{errors.leaderboardName && <small className="field-error">{errors.leaderboardName}</small>}</label>}
+                {profile.leaderboardOptIn && signedIn && <label className="form-field leaderboard-name-field"><span>Public leaderboard name</span><input name="leaderboardName" maxLength="40" value={profile.leaderboardName || ''} onChange={handleChange} aria-invalid={Boolean(errors.leaderboardName)} aria-describedby={errors.leaderboardName ? 'leaderboardName-error' : undefined} />{errors.leaderboardName && <small id="leaderboardName-error" className="field-error">{errors.leaderboardName}</small>}</label>}
               </div>
             </section>
           )}
 
+          {Object.values(errors).some(Boolean) && <p className="field-error" role="alert">{Object.values(errors).filter(Boolean).join(' ')}</p>}
           {saveError && <p className="field-error" role="alert">{saveError}</p>}
           <div className="onboarding-actions">
             <button className="button button-quiet" type="button" onClick={handleBack} disabled={saving}><ArrowLeft size={17} /> Back</button>
@@ -190,7 +171,7 @@ export default function ProfileScreen({ initialProfile, signedIn, demoMode, acco
         <aside className="bmi-card">
           <span className="eyebrow light">Informational indicator</span>
           <div className="bmi-value">{bmi ?? '—'}</div>
-          <strong>{bmi ? getBmiLabel(bmi) : 'Enter height and weight'}</strong>
+          <strong>{bmi ? Number(profile.age) < 20 ? 'Adult reference labels are not shown for under-20s' : getBmiLabel(bmi) : 'Enter height and weight'}</strong>
           <div className="bmi-scale"><i /><i /><i /><i /></div>
           <p><Info size={15} /> BMI is a general screening indicator, not a diagnosis or a complete measure of health.</p>
         </aside>

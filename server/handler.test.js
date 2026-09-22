@@ -130,12 +130,93 @@ vi.mock('./db.js', () => ({
           };
         });
     }
+    if (statement.includes('COUNT(*)::int AS total_sessions')) {
+      const userSessions = state.sessions.filter((session) => session.user_id === params[0]);
+      const activeDays = new Set(userSessions.map((s) => new Date(s.completed_at).toDateString())).size;
+      const totalDuration = userSessions.reduce((sum, s) => sum + (s.duration_seconds || 0), 0);
+      const totalCalories = userSessions.reduce((sum, s) => sum + (Number(s.estimated_calories) || 0), 0);
+      return [{
+        total_sessions: userSessions.length,
+        active_days: activeDays,
+        total_duration_seconds: totalDuration,
+        total_calories: totalCalories,
+      }];
+    }
+    if (statement.includes('COALESCE(SUM(er.reps), 0)::int AS total_reps')) {
+      const userSessionIds = new Set(state.sessions.filter((s) => s.user_id === params[0]).map((s) => s.id));
+      let totalReps = 0;
+      for (const [sessionId, results] of state.exerciseResults.entries()) {
+        if (userSessionIds.has(sessionId)) {
+          const list = Array.isArray(results) ? results : [results];
+          totalReps += list.reduce((sum, r) => sum + (Number(r?.reps) || 0), 0);
+        }
+      }
+      return [{ total_reps: totalReps }];
+    }
+    if (statement.includes('SELECT DISTINCT DATE(completed_at)::text AS active_date')) {
+      const userSessions = state.sessions.filter((session) => session.user_id === params[0]);
+      const distinctDates = [...new Set(userSessions.map((s) => new Date(s.completed_at).toISOString().slice(0, 10)))]
+        .sort().reverse();
+      return distinctDates.map((dateStr) => ({ active_date: dateStr }));
+    }
+    if (statement.includes('COUNT(s.id)::int AS total_sessions')) {
+      const userSessions = state.sessions.filter((session) => session.user_id === params[0]);
+      const activeDays = new Set(userSessions.map((s) => new Date(s.completed_at).toDateString())).size;
+      let totalReps = 0;
+      for (const [sessionId, results] of state.exerciseResults.entries()) {
+        const list = Array.isArray(results) ? results : [results];
+        totalReps += list.reduce((sum, r) => sum + (Number(r?.reps) || 0), 0);
+      }
+      const totalDuration = userSessions.reduce((sum, s) => sum + (s.duration_seconds || 0), 0);
+      const totalCalories = userSessions.reduce((sum, s) => sum + (Number(s.estimated_calories) || 0), 0);
+      return [{
+        total_sessions: userSessions.length,
+        active_days: activeDays,
+        total_reps: totalReps,
+        total_duration_seconds: totalDuration,
+        total_calories: totalCalories,
+      }];
+    }
+    if (statement.startsWith('SELECT u.id, BTRIM(u.leaderboard_name) AS name')) {
+      return state.users
+        .filter((user) => user.leaderboard_opt_in && String(user.leaderboard_name || '').trim())
+        .map((user) => {
+          const sessions = state.sessions.filter((session) => session.user_id === user.id);
+          const sessionIds = new Set(sessions.map((session) => session.id));
+          let reps = 0;
+          for (const [sessionId, results] of state.exerciseResults.entries()) {
+            if (!sessionIds.has(sessionId)) continue;
+            const list = Array.isArray(results) ? results : [results];
+            reps += list.reduce((sum, result) => sum + (Number(result?.reps) || 0), 0);
+          }
+          return {
+            id: user.id,
+            name: user.leaderboard_name.trim(),
+            workouts: sessions.length,
+            reps,
+            active_days: new Set(sessions.map((session) => new Date(session.completed_at).toDateString())).size,
+          };
+        });
+    }
+    if (statement.startsWith('SELECT COUNT(DISTINCT s.user_id)::int AS active_people')) {
+      return [{
+        active_people: new Set(state.sessions.map((session) => session.user_id)).size,
+        workouts: state.sessions.length,
+        reps: [...state.exerciseResults.values()].flatMap((results) => Array.isArray(results) ? results : [results])
+          .reduce((sum, result) => sum + (Number(result?.reps) || 0), 0),
+      }];
+    }
     if (statement.includes('FROM sessions s') && statement.includes('WHERE s.user_id=$1')) {
-      return state.sessions.filter((session) => session.user_id === params[0]).map((session) => ({
-        ...session,
-        ...(state.exerciseResults.get(session.id) || {}),
-        exercise_name: 'Bodyweight squats',
-      }));
+      const limit = params[1] || 200;
+      return state.sessions.filter((session) => session.user_id === params[0]).slice(0, limit).map((session) => {
+        const results = state.exerciseResults.get(session.id);
+        const firstResult = Array.isArray(results) ? results[0] : results;
+        return {
+          ...session,
+          ...(firstResult || {}),
+          exercise_name: 'Bodyweight squats',
+        };
+      });
     }
     if (statement.startsWith('SELECT id FROM exercises')) return params[0] === 'squats' ? [{ id: 'squats' }] : [];
     if (statement.startsWith('WITH upserted_session AS')) {
@@ -162,15 +243,20 @@ vi.mock('./db.js', () => ({
         cue_counts: JSON.parse(params[10]),
         movement_metrics: JSON.parse(params[11]),
       };
-      state.exerciseResults.set(session.id, result);
+      const existing = state.exerciseResults.get(session.id);
+      const list = Array.isArray(existing) ? existing : existing ? [existing] : [];
+      list.push(result);
+      state.exerciseResults.set(session.id, list);
       return [{ ...session, ...result, exercise_name: 'Bodyweight squats' }];
     }
     throw new Error(`Unhandled test query: ${statement}`);
   }),
 }));
 
-import { handleApiRequest } from './handler.js';
+import { handleApiRequest, calculateStreak } from './handler.js';
 import { EXERCISE_SEED } from './schema.js';
+import { EXERCISES } from '../src/data/exercises.js';
+import { calculateWorkoutDuration } from '../shared/recommendation.js';
 
 function createResponse() {
   const headers = new Map();
@@ -441,6 +527,32 @@ describe('Google account persistence and ownership', () => {
     expect(aSessionsAgain.body[0].formSummary).toBe('A only');
     expect(state.users).toHaveLength(2);
   });
+
+  it('publishes only an explicit leaderboard alias and removes the entry on opt-out', async () => {
+    const accountA = await login('account-a');
+    const accountB = await login('account-b');
+    const cookieA = cookieValue(accountA.cookie);
+    await callApi('profile', {
+      method: 'PUT', cookie: cookieA,
+      body: profileInput({ displayName: 'Private real name', leaderboardOptIn: true, leaderboardName: 'Public alias' }),
+    });
+    state.users[1].leaderboard_opt_in = true;
+    state.users[1].leaderboard_name = null;
+
+    const joined = await callApi('leaderboard', { cookie: cookieA });
+    expect(joined.status).toBe(200);
+    expect(joined.body.leaders.map((leader) => leader.name)).toEqual(['Public alias']);
+    expect(JSON.stringify(joined.body.leaders)).not.toContain('Private real name');
+    expect(JSON.stringify(joined.body.leaders)).not.toContain('b@example.com');
+
+    await callApi('profile', {
+      method: 'PUT', cookie: cookieA,
+      body: profileInput({ displayName: 'Private real name', leaderboardOptIn: false, leaderboardName: 'Public alias' }),
+    });
+    const optedOut = await callApi('leaderboard', { cookie: cookieValue(accountB.cookie) });
+    expect(optedOut.status).toBe(200);
+    expect(optedOut.body.leaders).toEqual([]);
+  });
 });
 
 describe('Saved plans and ownership', () => {
@@ -480,10 +592,11 @@ describe('Saved plans and ownership', () => {
     expect(created.status).toBe(200);
     expect(created.body.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(created.body.exercises.map((exercise) => exercise.id)).toEqual([
-      'warmup', 'squats', 'jumping-jacks', 'pushups', 'crunches', 'plank', 'cooldown',
+      'warmup', 'squats', 'marching', 'pushups', 'crunches', 'cooldown',
     ]);
     expect(state.plans).toHaveLength(1);
-    expect(state.planItems.map((item) => item.position)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(state.planItems.map((item) => item.position)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(calculateWorkoutDuration(created.body)).toBe(20 * 60);
     // Retrieval joins the saved items; changing fixture order must not reorder the plan.
     state.planItems.reverse();
     const restored = await callApi('plan', { cookie });
@@ -553,6 +666,115 @@ describe('Saved plans and ownership', () => {
     expect(state.sessions).toEqual([]);
     expect(state.exerciseResults.size).toBe(0);
   });
+
+  it('retrieves all sessions beyond 50 (e.g. 75 sessions) to preserve lifetime metrics and history', async () => {
+    const account = await login('account-75');
+    const user = state.users[0];
+    const cookie = cookieValue(account.cookie);
+
+    for (let i = 1; i <= 75; i++) {
+      const sessionId = `session-${String(i).padStart(4, '0')}`;
+      const dayOffset = Math.floor(i / 2);
+      const completedAt = new Date(Date.now() - dayOffset * 86400000).toISOString();
+      state.sessions.push({
+        id: sessionId,
+        user_id: user.id,
+        client_session_id: `client-${i}`,
+        completed_at: completedAt,
+        started_at: completedAt,
+        duration_seconds: 60 + i * 5,
+        estimated_calories: 10 + i * 2,
+        source: 'real',
+      });
+      state.exerciseResults.set(sessionId, {
+        exercise_id: 'squats',
+        reps: 10 + (i % 5),
+        framing_interruptions: 0,
+        cue_counts: {},
+        movement_metrics: {},
+      });
+    }
+
+    const response = await callApi('sessions', { cookie });
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveLength(75);
+
+    const totalReps = response.body.reduce((sum, s) => sum + s.reps, 0);
+    const totalDuration = response.body.reduce((sum, s) => sum + s.durationSeconds, 0);
+    const totalCalories = response.body.reduce((sum, s) => sum + s.calories, 0);
+
+    expect(totalReps).toBeGreaterThan(750);
+    expect(totalDuration).toBeGreaterThan(75 * 60);
+    expect(totalCalories).toBeGreaterThan(75 * 10);
+  });
+
+  it('computes true SQL lifetime aggregates beyond 500 records (560 sessions over 1+ years)', async () => {
+    const account = await login('account-560');
+    const user = state.users[0];
+    const cookie = cookieValue(account.cookie);
+
+    for (let i = 1; i <= 560; i++) {
+      const sessionId = `lifetime-session-${String(i).padStart(4, '0')}`;
+      const dayOffset = Math.floor(i / 2);
+      const completedAt = new Date(Date.now() - dayOffset * 86400000).toISOString();
+      state.sessions.push({
+        id: sessionId,
+        user_id: user.id,
+        client_session_id: `lifetime-client-${i}`,
+        completed_at: completedAt,
+        started_at: completedAt,
+        duration_seconds: 60,
+        estimated_calories: 10,
+        source: 'real',
+      });
+      state.exerciseResults.set(sessionId, {
+        exercise_id: 'squats',
+        reps: 10,
+        framing_interruptions: 0,
+        cue_counts: {},
+        movement_metrics: {},
+      });
+    }
+
+    const summaryResponse = await callApi('sessions-summary', { cookie });
+    expect(summaryResponse.status).toBe(200);
+    expect(summaryResponse.body.totalSessions).toBe(560);
+    expect(summaryResponse.body.workouts).toBe(560);
+    expect(summaryResponse.body.totalReps).toBe(5600);
+    expect(summaryResponse.body.totalDurationSeconds).toBe(560 * 60);
+    expect(summaryResponse.body.totalCalories).toBe(5600);
+    expect(summaryResponse.body.activeDays).toBe(281);
+
+    // Recent feed returns up to limit while headers reflect the true lifetime totals
+    const feedResponse = await callApi('sessions&limit=50', { cookie });
+    expect(feedResponse.status).toBe(200);
+    expect(feedResponse.body).toHaveLength(50);
+  });
+
+  it('accepts and preserves legacy location preferences on profile update', async () => {
+    const account = await login('account-legacy-loc');
+    const cookie = cookieValue(account.cookie);
+
+    for (const legacyLocation of ['Campus', 'Outdoor', 'Gym', 'PG room', 'Park / outdoor ground', 'Campus gym']) {
+      const response = await callApi('profile', {
+        method: 'PUT',
+        cookie,
+        body: {
+          displayName: 'Test User',
+          age: '22',
+          height: '175',
+          weight: '70',
+          level: 'Beginner',
+          goal: 'Stay fit',
+          time: '20',
+          location: legacyLocation,
+          equipment: 'None',
+        },
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.profile.location).toBe(legacyLocation);
+    }
+  });
 });
 
 describe('API request protection and logout', () => {
@@ -573,5 +795,155 @@ describe('API request protection and logout', () => {
 
     expect(response.status).toBe(200);
     expect(response.cookie).toContain('Max-Age=0');
+  });
+});
+
+describe('Lifetime aggregation correctness, streak, and catalogue parity', () => {
+  it('computes session-level aggregates independently from exercise results without join multiplication', async () => {
+    const account = await login('account-join-mult');
+    const user = state.users[0];
+    const cookie = cookieValue(account.cookie);
+
+    // Section 9 Fixture:
+    // Session A: 300 sec, 40 kcal, exercise results: 10 reps + 5 reps
+    // Session B: 600 sec, 80 kcal, exercise results: 20 reps
+    // Expected for A + B: sessions = 2, duration = 900 sec, calories = 120 kcal, reps = 35
+    state.sessions.push(
+      {
+        id: 'sess-a',
+        user_id: user.id,
+        completed_at: new Date('2026-03-28T10:00:00Z').toISOString(),
+        duration_seconds: 300,
+        estimated_calories: 40,
+        source: 'real',
+      },
+      {
+        id: 'sess-b',
+        user_id: user.id,
+        completed_at: new Date('2026-03-29T10:00:00Z').toISOString(),
+        duration_seconds: 600,
+        estimated_calories: 80,
+        source: 'real',
+      },
+    );
+    state.exerciseResults.set('sess-a', [
+      { exercise_id: 'squats', reps: 10 },
+      { exercise_id: 'pushups', reps: 5 },
+    ]);
+    state.exerciseResults.set('sess-b', [
+      { exercise_id: 'squats', reps: 20 },
+    ]);
+
+    let res = await callApi('sessions-summary', { cookie });
+    expect(res.status).toBe(200);
+    expect(res.body.totalSessions).toBe(2);
+    expect(res.body.totalDurationSeconds).toBe(900);
+    expect(res.body.totalCalories).toBe(120);
+    expect(res.body.totalReps).toBe(35);
+    expect(res.body.activeDays).toBe(2);
+
+    // Plus self-guided Session C (300 sec, 30 kcal, no rep result)
+    state.sessions.push({
+      id: 'sess-c',
+      user_id: user.id,
+      completed_at: new Date('2026-03-29T14:00:00Z').toISOString(),
+      duration_seconds: 300,
+      estimated_calories: 30,
+      source: 'self-guided',
+    });
+
+    res = await callApi('sessions-summary', { cookie });
+    expect(res.status).toBe(200);
+    expect(res.body.totalSessions).toBe(3);
+    expect(res.body.totalDurationSeconds).toBe(1200);
+    expect(res.body.totalCalories).toBe(150);
+    expect(res.body.totalReps).toBe(35);
+    expect(res.body.activeDays).toBe(2); // sess-b and sess-c are on the same day
+
+    // Plus Session D: 1 session with 3 exercise results (10, 15, 20 reps), 600 sec, 50 kcal
+    state.sessions.push({
+      id: 'sess-d',
+      user_id: user.id,
+      completed_at: new Date('2026-03-27T10:00:00Z').toISOString(),
+      duration_seconds: 600,
+      estimated_calories: 50,
+      source: 'real',
+    });
+    state.exerciseResults.set('sess-d', [
+      { exercise_id: 'squats', reps: 10 },
+      { exercise_id: 'crunches', reps: 15 },
+      { exercise_id: 'pushups', reps: 20 },
+    ]);
+
+    res = await callApi('sessions-summary', { cookie });
+    expect(res.status).toBe(200);
+    expect(res.body.totalSessions).toBe(4);
+    expect(res.body.totalDurationSeconds).toBe(1800);
+    expect(res.body.totalCalories).toBe(200);
+    expect(res.body.totalReps).toBe(80);
+    expect(res.body.activeDays).toBe(3);
+  });
+
+  it('computes current streak accurately from distinct activity dates without history truncation', () => {
+    const fixedNow = new Date('2026-09-22T12:00:00Z');
+
+    // 1. Today only -> streak 1
+    expect(calculateStreak(['2026-09-22'], fixedNow)).toBe(1);
+
+    // 2. Today + yesterday -> streak 2
+    expect(calculateStreak(['2026-09-22', '2026-09-21'], fixedNow)).toBe(2);
+
+    // 3. Today + yesterday + two days ago -> streak 3
+    expect(calculateStreak(['2026-09-22', '2026-09-21', '2026-09-20'], fixedNow)).toBe(3);
+
+    // 4. Today + two days ago (gap breaks streak) -> streak 1
+    expect(calculateStreak(['2026-09-22', '2026-09-20'], fixedNow)).toBe(1);
+
+    // 5. Yesterday + two days ago (active yesterday, not worked out yet today) -> streak 2
+    expect(calculateStreak(['2026-09-21', '2026-09-20'], fixedNow)).toBe(2);
+
+    // 6. Two days ago only (no activity today or yesterday) -> streak 0
+    expect(calculateStreak(['2026-09-20'], fixedNow)).toBe(0);
+
+    // 7. Multiple sessions today -> streak 1, not 3
+    expect(calculateStreak(['2026-09-22', '2026-09-22', '2026-09-22'], fixedNow)).toBe(1);
+
+    // 8. Old long history (300 consecutive days from yesterday back) -> streak 300
+    const longHistory = [];
+    for (let i = 1; i <= 300; i++) {
+      const d = new Date(fixedNow);
+      d.setDate(d.getDate() - i);
+      longHistory.push(d.toISOString().slice(0, 10));
+    }
+    expect(calculateStreak(longHistory, fixedNow)).toBe(300);
+  });
+
+  it('guarantees 100% metadata parity between client exercises and server schema seed', () => {
+    const seedMap = new Map(EXERCISE_SEED.map((e) => [e[0], {
+      id: e[0], name: e[1], category: e[2], durationLabel: e[3],
+      instruction: e[4], icon: e[5], cameraSupported: e[6],
+      detectionType: e[7], met: e[8], primaryMuscles: e[9],
+      secondaryMuscles: e[10], goalTags: e[11], minLevel: e[12],
+      equipment: e[13], impact: e[14],
+    }]));
+
+    const clientExercises = Object.values(EXERCISES);
+    expect(clientExercises.length).toBe(10);
+    expect(EXERCISE_SEED.length).toBe(10);
+
+    for (const client of clientExercises) {
+      const server = seedMap.get(client.id);
+      expect(server).toBeDefined();
+      expect(server.name).toBe(client.name);
+      expect(server.category).toBe(client.category);
+      expect(server.impact).toBe(client.impact);
+      expect(server.minLevel).toBe(client.minLevel);
+      expect(server.equipment).toBe(client.equipment);
+      expect(server.cameraSupported).toBe(Boolean(client.cameraSupported));
+      expect(server.detectionType).toBe(client.detectionType || null);
+      expect(server.met).toBe(client.met);
+      expect(server.goalTags.sort()).toEqual([...client.goalTags].sort());
+      expect(server.primaryMuscles).toEqual(client.primaryMuscles);
+    }
   });
 });

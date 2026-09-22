@@ -1,98 +1,43 @@
 # BITS in Motion — Current Project State
 
-## Current Repository State
-- **Branch**: `feature/google-auth-user-database`
-- **Current Live Repository HEAD**: Dynamic — inspect dynamically at session start using Git (`git rev-parse HEAD`). Git is authoritative for live HEAD.
-- **Last Application/Source Checkpoint**: `46c8f6d` (PR #1 merge commit)
-- **Origin Synchronization**: Synchronized with `origin/feature/google-auth-user-database`
-- **Branch Topology**: Authoritative branch is `feature/google-auth-user-database`. No local `main` branch exists; no remote `origin/main` branch exists.
-- **Working Tree State**: Clean. Tisha's personalization contribution (PR #1) has been merged and verified.
-- **Note on Commit Hashes**: Stored commit hashes in this document describe meaningful application/deployment checkpoints, not necessarily the latest documentation-only repository commit.
+## Release candidate
 
-## Production State
-- **Production URL**: `https://bits-in-motion-feature.vercel.app`
-- **Production Application Checkpoint**: `46c8f6d26070cb43a5afdb5b1c1c0bc32251d9e9`
-- **Deployment Status**: Production is fully deployed and verified live on Vercel at `https://bits-in-motion-feature.vercel.app` matching checkpoint `46c8f6d` (assets `index-BsOr_aia.js`, `index-DC9WbPc-.css`, `CoachScreen-rs_kxYkE.js`).
-- **Google Configuration**: `googleConfigured: true` (verified live via production `/api?action=status`).
-- **Neon Database Configuration**: `databaseConfigured: true` (verified live via production `/api?action=status`).
-- **Database Schema Status**: Production schema is updated and verified live on Neon database. The additive `impact` column (`TEXT NOT NULL DEFAULT 'low'`) is present and all 10 exercises are active in the catalogue with impact metadata.
+- **Authoritative branch:** `feature/google-auth-user-database` at `5f7b161c696452d11d9618cbc31a76fcfc748c67` before this release.
+- **Release branch:** `feature/full-product-quality-pass`.
+- **Last production checkpoint:** `46c8f6d26070cb43a5afdb5b1c1c0bc32251d9e9` at `https://bits-in-motion-feature.vercel.app`.
+- **Release status (23 September 2026):** the local release candidate is verified and ready for commit, push, and PR review. Production and the production database remain untouched by this release pass.
+- The completed Gemini implementation and Claude handoff were preserved. Codex continued from that baseline for Trust & Safety publication and release verification.
 
-## Last Completed Development
-- **Latest Merged Commits**:
-  - `46c8f6d` Merge pull request #1 from chaudharynehal/tisha-db
-  - `7f3af1e` Merge branch 'feature/google-auth-user-database' into tisha-db
-  - `0133088` chore: remove generator script and workbook artifacts from personalization PR
-  - `b9a38fe` feat: add low-impact exercise personalization rules and catalog metadata (Tisha)
-  - `3df8d72` Merge pull request #3 from chaudharynehal/feature/homepage-product-polish
-  - `3f88db5` docs: record homepage product polish checkpoint 428e95d
-  - `428e95d` feat: refine homepage UX, CTA hierarchy, and trust & safety screens
-  - `243d069` docs: record production deployment of homepage UX enhancements
-  - `a52af43` Merge pull request #2 from chaudharynehal/feature/homepage-ux-enhancements
-  - `66d90c0` feat: enhance homepage experience and navigation
-  - `dab04d0` Fix premature profile save when editing existing completed profile
-- **Tisha Personalization Integration (PR #1 Merged)**:
-  - **Contributor**: Tisha (`Tishadummy17@gmail.com`)
-  - **Original Feature Commit**: `b9a38fe83a861a300837acd4549d19c1f28e90b4`
-  - **Core Capabilities**:
-    1. **Exercise Catalogue Metadata**:
-       - Added `impact` (`low`, `moderate`, `high`), `minLevel` (`Beginner`, `Intermediate`), `equipment` (`None`, `Backpack`), and `goalTags` (`stay-fit`, `strength`, `weight-management`) to [`src/data/exercises.js`](file:///Users/nehal.chaudhary/Library/CloudStorage/OneDrive-ArcticWolfNetworksInc/Desktop/BITS_IN_MONTION/bits-in-motion-sih-main/src/data/exercises.js).
-       - Added new `marching` exercise (`Low-impact marching`, 3.5 MET, `cameraSupported: false`).
-    2. **Recommendation Engine Personalization**:
-       - Both client ([`src/utils/workoutRecommendation.js`](file:///Users/nehal.chaudhary/Library/CloudStorage/OneDrive-ArcticWolfNetworksInc/Desktop/BITS_IN_MONTION/bits-in-motion-sih-main/src/utils/workoutRecommendation.js)) and server ([`server/recommendation.js`](file:///Users/nehal.chaudhary/Library/CloudStorage/OneDrive-ArcticWolfNetworksInc/Desktop/BITS_IN_MONTION/bits-in-motion-sih-main/server/recommendation.js)) apply identical rules:
-         * Goal-based exercise filtering.
-         * Fitness level filtering (`minLevel`).
-         * Available time / duration filtering.
-         * Equipment availability filtering (e.g. Backpack for rows).
-         * Low-impact preference: substitutes `marching` for `jumping-jacks` when `profile.lowImpact === true`.
-    3. **Schema & Database Updates**:
-       - [`server/schema.js`](file:///Users/nehal.chaudhary/Library/CloudStorage/OneDrive-ArcticWolfNetworksInc/Desktop/BITS_IN_MONTION/bits-in-motion-sih-main/server/schema.js): Additive `ALTER TABLE exercises ADD COLUMN IF NOT EXISTS impact TEXT NOT NULL DEFAULT 'low' CHECK (impact IN ('low', 'moderate', 'high'))`.
-       - [`server/db.js`](file:///Users/nehal.chaudhary/Library/CloudStorage/OneDrive-ArcticWolfNetworksInc/Desktop/BITS_IN_MONTION/bits-in-motion-sih-main/server/db.js): Idempotent 15-parameter seed query updating exercise catalogue metadata and impact.
-       - [`server/handler.js`](file:///Users/nehal.chaudhary/Library/CloudStorage/OneDrive-ArcticWolfNetworksInc/Desktop/BITS_IN_MONTION/bits-in-motion-sih-main/server/handler.js): Passes `lowImpact` flag to recommendation engine and includes metadata in plan responses.
-  - **Exclusions from PR #1**:
-    - Removed `scripts/create-exercise-data-workbook.mjs` (unneeded dependency on `@oai/artifact-tool`).
-    - Removed `outputs/personalization-data/*` (unneeded spreadsheet artifacts).
-  - **Preserved Existing Live Features**:
-    - Homepage visual hierarchy, Top navigation Sign in, On-demand Auth Chooser card.
-    - Anonymous Camera Preview (`#preview`) strictly limited to the 4 camera exercises.
-    - Standalone Terms (`#terms`), Privacy (`#privacy`), and Health Disclaimer (`#health-disclaimer`) screens with `.trust-subnav`.
-    - Guest and signed-in profile, plan, coach, and progress workflows.
+## Final product state
+
+- Personalized plans use one shared client/server recommendation model. The circuit runs warm-up once, each station once per round, round recovery between rounds, and cooldown once, with no hidden sets.
+- Executable plans are exact for 10/20/30/45/60 minutes. The continuous runner supports Camera Coach and Self-Guided movements, Skip, Finish Early, Back/Home navigation, refresh/resume at the correct movement, and completed-workout cleanup.
+- Progress uses lifetime signed-in aggregates for sessions, reps, duration, calories, active days, and streak. Guest records remain local; account, demo, and Guest data remain isolated.
+- Catalogue, location normalization, Camera Coach lifecycle, responsive layouts, error/empty/loading states, and navigation were hardened without adding exercises or new product scope.
+
+## Trust & Safety publication
+
+- Public `#privacy`, `#terms`, and `#health-disclaimer` routes publish the approved 9/13/8-section content dated **22 September 2026**.
+- Privacy states the governing region is India; Terms states the governing law is India; Health includes the 112/102/108 and outside-India emergency guidance.
+- Features, How It Works, Terms, Privacy, and Health share accessible navigation with current-page state. Direct links, refresh, Back, Forward, and policy cross-links are verified.
+- Technical claims were checked against the implementation: MediaPipe processes frames in the browser without upload/persistence, camera tracks are released, Guest fitness data stays in browser storage, signed-in data uses the server/Neon path, leaderboard publication requires an opted-in alias, and no advertising or behavioural-tracking integration is present.
 
 ## Verification
-- **Unit & Integration Tests**: `npm test` — **10 test suites, 56/56 tests passing** (0 errors).
-- **Production Build**: `npm run build` — Vite v6 production build passes cleanly in 1.12s with zero errors or warnings.
-- **Browser Verification Suite**: `node scripts/verify-browser.mjs` — **20/20 checks passing** with 0 JavaScript console errors.
-- **Database Post-Migration**: Verified live on Neon PostgreSQL (10 exercises present with impact metadata, 4 users / 4 profiles / 29 plans / 10 sessions / 10 results 100% intact).
-- **Live Production Deployment**: Verified live on Vercel at `https://bits-in-motion-feature.vercel.app/` matching assets `index-BsOr_aia.js` and `index-DC9WbPc-.css`, with `Low-impact marching` and `low-impact movements preferred` confirmed live.
-- **Diff Check**: `git diff --check` — clean (0 whitespace issues).
 
-## Known Open Issues
-- None.
+- `npm test`: **13 suites, 577 passed, 0 skipped, 0 failed**; no `.only`.
+- `npm run build`: **PASS**, clean Vite production build.
+- `node scripts/verify-browser.mjs`: **22/22 checks**, 0 failures, 0 JavaScript errors, 0 unexpected network failures, and 0 horizontal overflow at 390, 844×390, 768, 820, 1024, and 1440 layouts.
+- `git diff --check`: **PASS**.
+- Browser coverage includes onboarding, dashboard/plan, Camera Coach, Self-Guided, result/progress, resume/skip/finish-early/full completion, leaderboard states, and all public trust routes.
 
-## Work In Progress
-- None. All pending pull requests (PR #1, PR #2, PR #3) are successfully integrated, tested, and live in production.
+## Production requirement
 
-## Pending External Contributions
-- None. Tisha's PR #1 is merged.
+- `scripts/production-goal-tags-patch.sql` is the prepared additive, idempotent patch for only these missing catalogue tags: `pushups` + `weight-management`, `crunches` + `weight-management`, and `lunges` + `stay-fit`.
+- The script includes the required pre-check, post-check, and rollback guidance. It has **not** been executed.
+- **Exact next production step after an approved merge:** capture the script's pre-check result, obtain explicit production authorization, apply only this patch to the live Neon database, verify the three rows, then validate the automatically generated Vercel deployment and run the non-destructive production smoke test.
 
-## Recommended Next Step
-- Ready for end-user testing or next development milestones.
+## Remaining limitations
 
-## Multi-Agent Handoff Protocol
-This repository is developed cooperatively by multiple coding agents (**Codex**, **Gemini / Antigravity**, and **Claude Code**). To avoid regressions and conflicting assumptions:
-
-1. **Every agent must read `PROJECT_STATE.md` first** before planning or modifying code. `PROJECT_STATE.md` is authoritative for project/handoff state.
-2. **Determine live repository state using Git** (Git is authoritative for live HEAD):
-   - `git status`
-   - `git rev-parse HEAD`
-   - `git log -5 --oneline`
-3. **Never overwrite another agent's uncommitted work**: If untracked or uncommitted changes exist, pause and clarify before proceeding.
-4. **Preserve working functionality and architecture**: Do not rewrite working modules or replace existing conventions simply because another agent authored them.
-5. **Run verification after meaningful work**: Always run `npm test`, `npm run build`, and `node scripts/verify-browser.mjs`.
-6. **Update `PROJECT_STATE.md` upon completion of meaningful work**:
-   - Agent used (Codex, Gemini, Claude Code)
-   - Meaningful application/deployment checkpoint hash (noting that stored commit hashes describe meaningful application/deployment checkpoints, not necessarily docs-only commits)
-   - What was changed and why
-   - Tests and builds performed
-   - Production / deployment status
-   - Known problems or open items
-   - Exact recommended next step
+- Real Google OAuth, live Neon round-trips, and physical movement accuracy require live-environment/device verification; automated QA uses mocked account/API fixtures and synthetic camera frames.
+- Camera and Self-Guided sessions are intentionally self-paced; the plan duration is a prescription, not an enforced stopwatch deadline.
+- The approved Privacy wording says clearing browser data or cache deletes Guest information; cache-only clearing does not necessarily remove `localStorage` in every browser.

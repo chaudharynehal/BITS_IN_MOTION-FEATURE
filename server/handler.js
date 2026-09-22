@@ -3,16 +3,18 @@ import { OAuth2Client } from 'google-auth-library';
 import { buildPlan } from './recommendation.js';
 import { isDatabaseConfigured, query } from './db.js';
 import { clearSessionCookie, createSessionToken, readSessionUserId, setSessionCookie } from './session.js';
+import { PROFILE_OPTIONS as PROFILE_CHOICES, LEGACY_EQUIPMENT, LEGACY_LOCATIONS } from '../shared/profile.js';
+import { getCircuitRounds, prescriptionFromLabel } from '../shared/recommendation.js';
 
 const googleClient = new OAuth2Client();
 const MAX_JSON_BYTES = 32 * 1024;
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROFILE_OPTIONS = {
-  level: new Set(['Beginner', 'Intermediate']),
-  goal: new Set(['Stay fit', 'Build strength', 'Support weight management']),
-  location: new Set(['Hostel room', 'Home', 'Campus', 'PG room']),
-  equipment: new Set(['None', 'Resistance band', 'Dumbbells', 'Backpack']),
+  level: new Set(PROFILE_CHOICES.level),
+  goal: new Set(PROFILE_CHOICES.goal),
+  location: new Set([...PROFILE_CHOICES.location, ...LEGACY_LOCATIONS]),
+  equipment: new Set([...PROFILE_CHOICES.equipment, ...LEGACY_EQUIPMENT]),
 };
 
 class RequestError extends Error {
@@ -285,6 +287,7 @@ function mapPlanExercise(row) {
     name: row.exercise_name,
     category: row.exercise_category,
     duration: row.target_label,
+    ...prescriptionFromLabel(row.target_label),
     instruction: row.exercise_instruction,
     icon: row.exercise_icon,
     cameraSupported: row.camera_supported,
@@ -317,11 +320,28 @@ async function getLatestPlan(userId) {
      ORDER BY pi.position`,
     [plans[0].id, userId],
   );
+  const totalMinutes = Number(plans[0].total_minutes);
+  const rounds = getCircuitRounds(totalMinutes);
+  const circuitStations = items.filter((item) => !['warmup', 'cooldown'].includes(item.exercise_id)).length;
+  const roundBreakSeconds = 60;
+  const roundRecoveriesMinutes = rounds > 1 ? rounds - 1 : 0;
+  const activeCircuitMinutes = circuitStations * rounds;
+  const circuitTotalMinutes = activeCircuitMinutes + roundRecoveriesMinutes;
+  const remainingMinutes = Math.max(2, totalMinutes - circuitTotalMinutes);
+  const warmupMinutes = Math.max(1, Math.ceil(remainingMinutes / 2));
+  const cooldownMinutes = Math.max(1, remainingMinutes - warmupMinutes);
   return {
     id: plans[0].id,
     title: plans[0].title,
     focus: plans[0].focus,
-    totalMinutes: Number(plans[0].total_minutes),
+    rounds,
+    circuitStations,
+    roundBreakSeconds,
+    roundRecoveriesMinutes,
+    warmupMinutes,
+    cooldownMinutes,
+    activeCircuitMinutes,
+    totalMinutes,
     reasons: plans[0].reasons || [],
     createdAt: plans[0].created_at,
     exercises: items.map(mapPlanExercise),
@@ -383,17 +403,121 @@ function mapSession(row) {
   };
 }
 
+export function calculateStreak(activeDateStrings = [], now = new Date()) {
+  const dateSet = new Set(
+    activeDateStrings.map((d) => (typeof d === 'string' ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10))),
+  );
+  if (dateSet.size === 0) return 0;
+
+  const cursor = new Date(now);
+  const formatYmd = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const todayStr = formatYmd(cursor);
+  let streak = 0;
+
+  if (dateSet.has(todayStr)) {
+    while (dateSet.has(formatYmd(cursor))) {
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+  } else {
+    cursor.setDate(cursor.getDate() - 1);
+    const yesterdayStr = formatYmd(cursor);
+    if (dateSet.has(yesterdayStr)) {
+      while (dateSet.has(formatYmd(cursor))) {
+        streak += 1;
+        cursor.setDate(cursor.getDate() - 1);
+      }
+    }
+  }
+
+  return streak;
+}
+
+export async function getSessionsSummary(userId, now = new Date()) {
+  const [sessionStatsRows, repStatsRows, activeDatesRows] = await Promise.all([
+    query(
+      `SELECT
+         COUNT(*)::int AS total_sessions,
+         COUNT(DISTINCT DATE(completed_at))::int AS active_days,
+         COALESCE(SUM(duration_seconds), 0)::int AS total_duration_seconds,
+         COALESCE(SUM(estimated_calories), 0)::numeric AS total_calories
+       FROM sessions
+       WHERE user_id = $1`,
+      [userId],
+    ),
+    query(
+      `SELECT COALESCE(SUM(er.reps), 0)::int AS total_reps
+       FROM exercise_results er
+       JOIN sessions s ON s.id = er.session_id
+       WHERE s.user_id = $1`,
+      [userId],
+    ),
+    query(
+      `SELECT DISTINCT DATE(completed_at)::text AS active_date
+       FROM sessions
+       WHERE user_id = $1
+       ORDER BY active_date DESC`,
+      [userId],
+    ),
+  ]);
+
+  const sessionRow = sessionStatsRows[0] || {};
+  const repRow = repStatsRows[0] || {};
+  const activeDates = (activeDatesRows || []).map((r) => r.active_date);
+  const streak = calculateStreak(activeDates, now);
+
+  const weekAgo = new Date(now);
+  weekAgo.setDate(weekAgo.getDate() - 6);
+  weekAgo.setHours(0, 0, 0, 0);
+  const weekAgoYmd = `${weekAgo.getFullYear()}-${String(weekAgo.getMonth() + 1).padStart(2, '0')}-${String(weekAgo.getDate()).padStart(2, '0')}`;
+  const weeklyActiveDays = activeDates.filter((dateStr) => dateStr >= weekAgoYmd).length;
+
+  return {
+    totalSessions: Number(sessionRow.total_sessions || 0),
+    workouts: Number(sessionRow.total_sessions || 0),
+    sessions: Number(sessionRow.total_sessions || 0),
+    activeDays: Number(sessionRow.active_days || 0),
+    totalReps: Number(repRow.total_reps || 0),
+    totalDurationSeconds: Number(sessionRow.total_duration_seconds || 0),
+    totalCalories: Number(Number(sessionRow.total_calories || 0).toFixed(1)),
+    streak,
+    weeklyActiveDays,
+  };
+}
+
+async function handleSessionsSummary(req, res, user) {
+  if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
+  const summary = await getSessionsSummary(user.id);
+  return send(res, 200, summary);
+}
+
 async function handleSessions(req, res, user) {
   if (req.method === 'GET') {
+    const url = new URL(req.url, 'http://localhost');
+    const limitParam = Number(url.searchParams.get('limit'));
+    const limit = Number.isInteger(limitParam) && limitParam > 0 ? Math.min(limitParam, 500) : 200;
     const rows = await query(
       `SELECT s.*, er.exercise_id, e.name AS exercise_name, er.reps,
         er.framing_interruptions, er.cue_counts, er.movement_metrics
        FROM sessions s
        LEFT JOIN exercise_results er ON er.session_id=s.id
        LEFT JOIN exercises e ON e.id=er.exercise_id
-       WHERE s.user_id=$1 ORDER BY s.completed_at DESC LIMIT 50`,
-      [user.id],
+       WHERE s.user_id=$1 ORDER BY s.completed_at DESC LIMIT $2`,
+      [user.id, limit],
     );
+    const summary = await getSessionsSummary(user.id);
+    res.setHeader('X-Total-Sessions', String(summary.totalSessions));
+    res.setHeader('X-Total-Reps', String(summary.totalReps));
+    res.setHeader('X-Total-Duration', String(summary.totalDurationSeconds));
+    res.setHeader('X-Total-Calories', String(summary.totalCalories));
+    res.setHeader('X-Active-Days', String(summary.activeDays));
+    res.setHeader('X-Current-Streak', String(summary.streak));
     return send(res, 200, rows.map(mapSession));
   }
   if (req.method !== 'POST') return methodNotAllowed(res, ['GET', 'POST']);
@@ -443,32 +567,41 @@ async function handleLeaderboard(req, res, user) {
   const period = url.searchParams.get('period') === 'all' ? 'all' : 'week';
   const dateFilter = period === 'week' ? "AND s.completed_at >= NOW() - INTERVAL '7 days'" : '';
   const rows = await query(
-    `SELECT u.id, COALESCE(NULLIF(u.leaderboard_name,''), u.display_name) AS name,
+    `SELECT u.id, BTRIM(u.leaderboard_name) AS name,
       COUNT(DISTINCT s.id)::int AS workouts,
       COALESCE(SUM(er.reps),0)::int AS reps,
       COUNT(DISTINCT DATE(s.completed_at))::int AS active_days
      FROM users u
      LEFT JOIN sessions s ON s.user_id=u.id ${dateFilter}
      LEFT JOIN exercise_results er ON er.session_id=s.id
-     WHERE u.leaderboard_opt_in=TRUE
+     WHERE u.leaderboard_opt_in=TRUE AND NULLIF(BTRIM(u.leaderboard_name),'') IS NOT NULL
      GROUP BY u.id ORDER BY workouts DESC, reps DESC, active_days DESC, name ASC LIMIT 50`,
   );
   const leaders = rows.map((row, index) => ({
     rank: index + 1,
     name: row.name,
+    sessions: Number(row.workouts),
     workouts: Number(row.workouts),
     reps: Number(row.reps),
     activeDays: Number(row.active_days),
     isCurrentUser: row.id === user.id,
   }));
-  const community = await query(
+  const communityRows = await query(
     `SELECT COUNT(DISTINCT s.user_id)::int AS active_people,
       COUNT(DISTINCT s.id)::int AS workouts,
       COALESCE(SUM(er.reps),0)::int AS reps
      FROM sessions s LEFT JOIN exercise_results er ON er.session_id=s.id
      WHERE 1=1 ${period === 'week' ? "AND s.completed_at >= NOW() - INTERVAL '7 days'" : ''}`,
   );
-  return send(res, 200, { period, leaders, community: community[0] });
+  const community = communityRows[0] || {};
+  return send(res, 200, {
+    period,
+    leaders,
+    community: {
+      ...community,
+      sessions: Number(community.workouts || 0),
+    },
+  });
 }
 
 export async function handleApiRequest(req, res) {
@@ -505,6 +638,7 @@ export async function handleApiRequest(req, res) {
     if (action === 'profile') return await handleProfile(req, res, user);
     if (action === 'plan') return await handlePlan(req, res, user);
     if (action === 'sessions') return await handleSessions(req, res, user);
+    if (action === 'sessions-summary' || action === 'progress-summary') return await handleSessionsSummary(req, res, user);
     if (action === 'leaderboard') return await handleLeaderboard(req, res, user);
     return send(res, 404, { error: 'Unknown API action.', code: 'NOT_FOUND' });
   } catch (error) {
@@ -514,7 +648,8 @@ export async function handleApiRequest(req, res) {
     if (error.code === '42P01' || error.code === '42703') {
       return send(res, 503, { error: 'The account database has not been initialized. Run the database setup command.', code: 'DATABASE_SETUP_REQUIRED' });
     }
-    console.error('BITS in Motion API error', error);
+    // Never print driver errors: they can contain connection strings or SQL data.
+    console.error('BITS in Motion API request failed.');
     return send(res, 500, { error: 'The server could not complete this request.', code: 'SERVER_ERROR' });
   }
 }

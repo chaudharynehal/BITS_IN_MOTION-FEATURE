@@ -1,9 +1,27 @@
-import { ArrowRight, Check, Clock3, Info, LayoutDashboard, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, Clock3, Info, LayoutDashboard, Play, RotateCcw, Sparkles } from 'lucide-react';
 import ExerciseCard from '../components/ExerciseCard';
 import FoodGuidanceCard from '../components/FoodGuidanceCard';
 import ScreenHeader from '../components/ScreenHeader';
+import { planActivity } from '../utils/planActivity';
 
-export default function PlanScreen({ profile, plan, sessions, progressState, onRetryProgress, planState, planErrorAction, onRetryPlan, onStartCoach, onCreatePlan, onExplore, onBack }) {
+export default function PlanScreen({
+  profile,
+  plan,
+  sessions,
+  progressState,
+  onRetryProgress,
+  planState,
+  planErrorAction,
+  onRetryPlan,
+  onStartCoach,
+  onStartSelfGuided,
+  onStartWorkout,
+  onResumeWorkout,
+  activeWorkout,
+  onCreatePlan,
+  onExplore,
+  onBack,
+}) {
   if (!plan || planState === 'loading' || planState === 'error') {
     return (
       <main className="screen-page plan-page">
@@ -15,17 +33,14 @@ export default function PlanScreen({ profile, plan, sessions, progressState, onR
     );
   }
 
-  const completedIds = new Set(sessions.filter((session) =>
-    Number(session.reps) > 0 && plan.createdAt && new Date(session.completedAt) >= new Date(plan.createdAt),
-  ).map((session) => session.exerciseId));
-  const cameraExercises = plan.exercises.filter((exercise) => exercise.cameraSupported);
-  const firstCameraExercise = cameraExercises.find((exercise) => !completedIds.has(exercise.id)) || cameraExercises[0];
-  const completedCount = cameraExercises.filter((exercise) => completedIds.has(exercise.id)).length;
-  const completion = Math.round((completedCount / Math.max(1, cameraExercises.length)) * 100);
+  const { practicedIds: completedIds } = planActivity(plan, sessions);
+  const totalExercises = (plan.exercises || []).length;
+  const completedCount = (plan.exercises || []).filter((exercise) => completedIds.has(exercise.id)).length;
+  const completion = Math.round((completedCount / Math.max(1, totalExercises)) * 100);
 
   return (
     <main className="screen-page plan-page">
-      <ScreenHeader eyebrow="My plan" title="A workout shaped around your day" description="Review every movement, start with camera guidance, or explore the rest of the app. Your plan remains saved." onBack={onBack} />
+      <ScreenHeader eyebrow="My plan" title="A workout shaped around your day" description="Review every movement, start with camera guidance, or follow a continuous workout. Your plan remains saved." onBack={onBack} />
 
       <section className="plan-hero panel-dark">
         <div>
@@ -37,26 +52,71 @@ export default function PlanScreen({ profile, plan, sessions, progressState, onR
       </section>
 
       <section className="plan-decision panel">
-        <div><span className="eyebrow">Your plan is ready</span><h2>Train now—or come back when it fits.</h2><p>Your plan stays saved, ready whenever you are.</p></div>
         <div>
-          <button className="button button-primary" onClick={() => firstCameraExercise && onStartCoach(firstCameraExercise.id, 'plan')} disabled={!firstCameraExercise}>Start today’s workout <ArrowRight size={17} /></button>
-          <button className="button button-quiet" onClick={onExplore}><LayoutDashboard size={17} /> Explore dashboard</button>
+          <span className="eyebrow">Your plan is ready</span>
+          <h2>Train now—or come back when it fits.</h2>
+          <p>
+            {activeWorkout
+              ? `Workout in progress: you are on Movement ${activeWorkout.currentIndex + 1} of ${activeWorkout.exercises.length}.`
+              : 'Follow your continuous workout from warm-up to cool-down, or practice any movement individually.'}
+          </p>
+        </div>
+        <div className="plan-decision-actions">
+          {activeWorkout ? (
+            <>
+              <button className="button button-primary button-large" type="button" onClick={onResumeWorkout}>
+                <Play size={18} /> Resume workout ({activeWorkout.currentIndex + 1}/{activeWorkout.exercises.length})
+              </button>
+              <button className="button button-secondary" type="button" onClick={() => onStartWorkout(plan, 0)}>
+                <RotateCcw size={16} /> Restart workout
+              </button>
+            </>
+          ) : (
+            <button className="button button-primary button-large" type="button" onClick={() => onStartWorkout(plan)}>
+              <Play size={18} /> Start Workout ({plan.totalMinutes} min)
+            </button>
+          )}
+          <button className="button button-quiet" type="button" onClick={onExplore}><LayoutDashboard size={17} /> Explore dashboard</button>
         </div>
       </section>
 
       <section className="plan-progress panel">
         {progressState === 'loading' ? <p role="status">Loading your plan activity…</p> : progressState === 'error' ? <p role="alert">Your plan is saved, but activity could not load. <button className="text-button" onClick={onRetryProgress}>Retry activity</button></p> : <>
-          <div><span>Plan activity</span><strong>{completedCount} of {cameraExercises.length} camera movements practiced</strong></div>
+          <div><span>Plan activity</span><strong>{completedCount} of {totalExercises} movements completed</strong></div>
           <div className="plan-progress-track"><i style={{ width: completion + '%' }} /></div>
-          <small>{plan.createdAt ? 'Based on saved sessions with tracked reps since this plan was created. ' : 'Activity tracking starts when you next update your plan. '}Self-guided movements and full sets are not automatically marked complete.</small>
+          <small>{plan.createdAt ? 'Includes camera coaching and self-guided movements completed since this plan was created.' : 'Activity tracking starts when you next update your plan.'}</small>
         </>}
       </section>
 
       <section className="reason-strip"><strong>Why this plan?</strong><div>{plan.reasons.map((reason) => <span key={reason}>{reason}</span>)}</div></section>
 
+      {plan.rounds > 1 && (
+        <section className="circuit-structure-banner panel">
+          <RotateCcw size={18} />
+          <div>
+            <strong>Structured {plan.rounds}-Round Circuit Routine</strong>
+            <p>
+              Instead of repetitive giant sets, this workout cycles through {plan.exercises.filter((e) => !['warmup', 'cooldown'].includes(e.id)).length} stations across {plan.rounds} rounds after your mobility warm-up.
+            </p>
+          </div>
+        </section>
+      )}
+
       <div className="plan-content-grid">
         <section className="exercise-list" aria-label="Workout exercises">
-          {plan.exercises.map((exercise, index) => <div className="plan-exercise-wrap" key={exercise.id}>{progressState === 'ready' && completedIds.has(exercise.id) && <span className="completed-chip"><Check size={13} /> Practiced</span>}<ExerciseCard exercise={exercise} index={index} onStartCoach={(id) => onStartCoach(id, 'plan')} /></div>)}
+          {plan.exercises.map((exercise, index) => (
+            <div className="plan-exercise-wrap" key={exercise.key || `${exercise.id}-${index}`}>
+              {progressState === 'ready' && completedIds.has(exercise.id) && (
+                <span className="completed-chip"><Check size={13} /> Completed</span>
+              )}
+              <ExerciseCard
+                exercise={exercise}
+                index={index}
+                onStartCoach={(id) => onStartCoach(id, 'plan')}
+                onStartSelfGuided={(id) => onStartSelfGuided?.(id, 'plan')}
+              />
+            </div>
+          ))}
         </section>
         <div className="plan-side">
           <FoodGuidanceCard goal={profile.goal} />

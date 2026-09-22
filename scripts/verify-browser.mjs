@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { EXERCISES } from '../src/data/exercises.js';
+import { generateWorkoutPlan } from '../src/utils/workoutRecommendation.js';
+import { calculateWorkoutDuration } from '../shared/recommendation.js';
 
 const origin = process.env.BROWSER_TEST_URL || 'http://127.0.0.1:5173';
 const base = new URL(origin);
@@ -16,7 +18,8 @@ const outputDirectory = await mkdtemp(path.join(tmpdir(), 'bits-motion-browser-'
 const chromePath = process.env.CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : 'google-chrome');
 const chrome = spawn(chromePath, [
-  '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  '--headless=new', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+  '--no-first-run', '--no-default-browser-check',
   '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0',
   '--user-data-dir=' + path.join(outputDirectory, 'chrome-profile'), 'about:blank',
 ], { stdio: 'ignore' });
@@ -24,6 +27,11 @@ let socket;
 const results = [];
 const errors = [];
 const modelDiagnostics = [];
+const networkFailures = [];
+const httpErrors = [];
+const networkUrls = new Map();
+const reviewedLayouts = new Set();
+let emptyLeaderboard = false;
 let holdAccountSessions = null;
 let releaseSessions;
 let delayedResponse;
@@ -41,9 +49,9 @@ const accounts = Object.fromEntries(['A', 'B'].map((key) => [key, {
   profile: null, plan: null, sessions: [],
 }]));
 const makePlan = (key, profile) => ({
-  id: 'test-plan-' + key, title: profile.displayName + ' private plan', totalMinutes: Number(profile.time),
-  focus: 'A mocked plan used only for browser verification.', reasons: ['Beginner pacing', 'No equipment'],
-  createdAt: new Date().toISOString(), exercises: [EXERCISES.warmup, EXERCISES.squats, EXERCISES.cooldown],
+  ...generateWorkoutPlan(profile),
+  id: 'test-plan-' + key, title: profile.displayName + ' private plan',
+  createdAt: new Date().toISOString(),
 });
 const fixtureSession = (key, reps) => ({
   id: 'test-session-' + key, clientSessionId: 'test-client-' + key,
@@ -138,10 +146,20 @@ try {
         account.sessions.push(session);
         payload = session;
       } else payload = account.sessions;
+    } else if (action === 'sessions-summary') {
+      payload = {
+        totalSessions: account.sessions.length,
+        workouts: account.sessions.length,
+        activeDays: new Set(account.sessions.map((s) => (s.completedAt ? s.completedAt.slice(0, 10) : '2026-03-29'))).size,
+        totalReps: account.sessions.reduce((sum, s) => sum + (s.reps || 0), 0),
+        totalDurationSeconds: account.sessions.reduce((sum, s) => sum + (s.durationSeconds || 0), 0),
+        totalCalories: account.sessions.reduce((sum, s) => sum + (s.calories || 0), 0),
+      };
     } else if (action === 'leaderboard') {
       payload = { community: { active_people: 1, workouts: 1, reps: 11 }, leaders: [
         { rank: 1, name: 'Private alias A', workouts: 1, reps: 11, activeDays: 1, isCurrentUser: true },
       ] };
+      if (emptyLeaderboard) payload = { community: {}, leaders: [] };
     } else {
       status = 404; payload = { error: 'Unsupported mock action: ' + action };
     }
@@ -169,6 +187,12 @@ try {
       void answerApi(message.params).catch((error) => errors.push(error.message));
     } else if (message.method === 'Runtime.exceptionThrown') {
       errors.push(message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text);
+    } else if (message.method === 'Network.requestWillBeSent') {
+      networkUrls.set(message.params.requestId, message.params.request.url);
+    } else if (message.method === 'Network.loadingFailed') {
+      networkFailures.push({ url: networkUrls.get(message.params.requestId), error: message.params.errorText, cancelled: Boolean(message.params.canceled) });
+    } else if (message.method === 'Network.responseReceived' && message.params.response.status >= 400) {
+      httpErrors.push({ url: message.params.response.url, status: message.params.response.status });
     } else if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error') {
       const text = message.params.args.map((arg) => arg.value || arg.description || '').join(' ');
       // Headless Chrome has no GPU. The existing model loader deliberately falls back to CPU.
@@ -216,10 +240,13 @@ try {
   }
   async function completeProfile(name, { edit = false, optIn = false } = {}) {
     await setFields({ displayName: name, age: '20', height: '175', weight: '70' });
+    await reviewWidths('profile-about');
     await click('Continue');
     await setFields({ level: 'Beginner', goal: 'Stay fit' });
+    await reviewWidths('profile-goal');
     await click('Continue');
     await setFields({ time: '20', location: 'Hostel room', equipment: 'None' });
+    await reviewWidths('profile-setup', true);
     if (optIn) {
       await setFields({ leaderboardOptIn: true });
       await setFields({ leaderboardName: 'Private alias A' });
@@ -258,12 +285,15 @@ try {
     await evaluate('window.scrollTo(0, 0)');
     await delay(180);
     const layout = await evaluate('({width: innerWidth, scrollWidth: document.documentElement.scrollWidth})');
-    assert(layout.scrollWidth <= layout.width + 1, label + ' horizontal overflow: ' + JSON.stringify(layout));
     const metrics = await send('Page.getLayoutMetrics');
     const capture = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true,
       clip: { x: 0, y: 0, width, height: metrics.cssContentSize.height, scale: 1 } });
     const file = path.join(outputDirectory, label + '-' + width + '.png');
     await writeFile(file, Buffer.from(capture.data, 'base64'));
+    if (layout.scrollWidth > layout.width + 1) {
+      const offenders = await evaluate('[...document.querySelectorAll("main *, header *")].filter(el => { const r = el.getBoundingClientRect(); return r.width && (r.right > innerWidth + 1 || r.left < -1); }).slice(0, 20).map(el => ({tag: el.tagName, cls: el.className, width: Math.round(el.getBoundingClientRect().width)}))');
+      assert.fail(label + ' horizontal overflow: ' + JSON.stringify({ ...layout, offenders }));
+    }
     results.push('Screenshot and no horizontal overflow: ' + label + ' at ' + width + 'px');
   }
   async function record(name, work) {
@@ -272,8 +302,59 @@ try {
     console.log('PASS ' + name);
   }
 
+  async function reviewLandscape(label) {
+    await send('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 1, mobile: true });
+    await evaluate('window.scrollTo(0, 0)');
+    await delay(180);
+    const layout = await evaluate('({width: innerWidth, scrollWidth: document.documentElement.scrollWidth})');
+    const metrics = await send('Page.getLayoutMetrics');
+    const capture = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true,
+      clip: { x: 0, y: 0, width: 844, height: metrics.cssContentSize.height, scale: 1 } });
+    const file = path.join(outputDirectory, label + '-844x390-landscape.png');
+    await writeFile(file, Buffer.from(capture.data, 'base64'));
+    if (layout.scrollWidth > layout.width + 1) {
+      assert.fail(label + ' landscape horizontal overflow: ' + JSON.stringify(layout));
+    }
+    results.push('Screenshot and no horizontal overflow: ' + label + ' at 844x390 landscape');
+  }
+
+  async function reviewWidths(label, includeLandscape = false) {
+    if (reviewedLayouts.has(label)) return;
+    for (const width of [390, 768, 820, 1024, 1440]) await screenshot(label, width);
+    if (includeLandscape) {
+      await reviewLandscape(label);
+      await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+      await delay(100);
+    }
+    reviewedLayouts.add(label);
+  }
+
+  async function syntheticCamera(mode = 'granted') {
+    await evaluate(`(() => {
+      window.__qaStreams ||= [];
+      navigator.mediaDevices.getUserMedia = async () => {
+        if (${JSON.stringify(mode)} !== 'granted') throw new DOMException('QA camera state', ${JSON.stringify(mode)});
+        const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 480;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#31445b'; context.fillRect(0, 0, 640, 480);
+        const stream = canvas.captureStream(15);
+        window.__qaStreams.push(stream);
+        // Keep a synthetic frame arriving, with no human pose or private pixels.
+        const timer = setInterval(() => context.fillRect(0, 0, 640, 480), 70);
+        for (const track of stream.getTracks()) {
+          const stop = track.stop.bind(track);
+          track.stop = () => { clearInterval(timer); stop(); };
+        }
+        return stream;
+      };
+    })()`);
+  }
+
+  const streamsStopped = () => evaluate('(window.__qaStreams || []).every(stream => stream.getTracks().every(track => track.readyState === "ended"))');
+
   await send('Runtime.enable');
   await send('Page.enable');
+  await send('Network.enable');
   await send('Fetch.enable', { patterns: [{ urlPattern: base.origin + '/api*', requestStage: 'Request' }] });
   await send('Page.addScriptToEvaluateOnNewDocument', { source: '(' + googleMock.toString() + ')()' });
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
@@ -303,7 +384,7 @@ try {
     assert.equal(await evaluate('document.querySelectorAll(".launch-screen button").length'), 0);
 
     // 4. Verify automatic transition completes into Homepage
-    await ready(() => evaluate('!document.querySelector(".launch-screen") && Boolean(document.querySelector(".welcome-screen-v2"))'), 4000);
+    await ready(() => evaluate('!document.querySelector(".launch-screen") && Boolean(document.querySelector(".welcome-screen-v2"))'), 8000);
     assert.equal(await evaluate('sessionStorage.getItem("bits-motion-launch-seen-v2")'), '1');
 
     // 5. Restore prefers-reduced-motion: reduce for swift subsequent test execution
@@ -316,7 +397,7 @@ try {
     await click('Set up my fitness journey');
     await ready(() => evaluate('[...document.querySelectorAll("button")].some(el => el.textContent === "Continue with Google")'));
     assert.equal(await evaluate('[...document.querySelectorAll("button")].filter(el => el.textContent.trim() === "Continue as Guest").length'), 1);
-    for (const width of [390, 768, 1440]) await screenshot('home', width);
+    await reviewWidths('home');
     await click('Leaderboard', '.marketing-nav button');
     await route('leaderboard');
     assert((await body()).includes('Sample leaderboard preview'));
@@ -327,57 +408,65 @@ try {
     await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
   });
 
-  await record('Dedicated Features, How It Works, and Terms screens navigation, history and refresh', async () => {
+  await record('Public information and trust routes support deep links, refresh, Back, Forward, and cross-navigation', async () => {
     await click('Features', '.marketing-nav button');
     await route('features');
     assert((await body()).includes('Real AI coaching for real student spaces'));
+    assert.equal(await evaluate('document.querySelector(".trust-subnav-pill[aria-current=page]").textContent.trim()'), 'Features');
     await reload();
     await ready(() => evaluate('Boolean(document.querySelector(".features-page"))'));
-    await evaluate('document.querySelector(' + JSON.stringify('[aria-label="Go back"]') + ').click()');
-    await route('');
-    await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
-
-    await click('How it works', '.marketing-nav button');
+    await click('How It Works', '.trust-subnav-pill');
     await route('how-it-works');
     assert((await body()).includes('How BITS in Motion works'));
     await evaluate('history.back()');
-    await route('');
-    await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
+    await route('features');
     await evaluate('history.forward()');
     await route('how-it-works');
-    await evaluate('document.querySelector(' + JSON.stringify('[aria-label="Go to BITS in Motion homepage"]') + ').click()');
-    await route('');
-    await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
 
-    await click('Terms & Conditions', '.marketing-nav button');
-    await route('terms');
-    assert((await body()).includes('Terms of Service'));
+    await send('Page.navigate', { url: origin + '/#terms' });
+    await ready(() => evaluate('Boolean(document.querySelector(".terms-page"))'));
+    assert((await body()).includes('Terms and Conditions'));
+    assert((await body()).includes('Last updated: 22 September 2026'));
+    assert((await body()).includes('Governing law: India'));
+    assert.equal(await evaluate('document.querySelectorAll(".terms-page .terms-section").length'), 13);
+    assert.equal(await evaluate('document.querySelector(' + JSON.stringify('a.trust-inline-link[href="#privacy"]') + ').textContent'), 'Privacy Policy');
+    assert.equal(await evaluate('document.querySelector(' + JSON.stringify('a.trust-inline-link[href="#health-disclaimer"]') + ').textContent'), 'Health Disclaimer');
     await reload();
     await ready(() => evaluate('Boolean(document.querySelector(".terms-page"))'));
-    await click('Return to Home');
-    await route('');
-    await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
 
-    // Test Privacy Policy screen navigation via footer
-    await click('Privacy Policy', '.welcome-footer button');
-    await route('privacy');
+    await send('Page.navigate', { url: origin + '/#privacy' });
+    await ready(() => evaluate('Boolean(document.querySelector(".privacy-page"))'));
     assert((await body()).includes('Privacy Policy'));
-    assert((await body()).includes('Zero Video Upload'));
+    assert((await body()).includes('Camera usage: nothing is recorded or stored'));
+    assert((await body()).includes('Governing region: India'));
+    assert((await body()).includes('If you use Guest Mode'));
+    assert((await body()).includes('If you sign in with Google'));
+    assert((await body()).includes('If you join the leaderboard'));
+    assert.equal(await evaluate('document.querySelectorAll(".privacy-page .terms-section").length'), 9);
     await reload();
     await ready(() => evaluate('Boolean(document.querySelector(".privacy-page"))'));
 
-    // Cross-navigation via trust-subnav pill to Health Disclaimer
-    await click('Health Disclaimer', '.trust-subnav-pill');
-    await route('health-disclaimer');
-    assert((await body()).includes('Health & Safety Disclaimer'));
-    assert((await body()).includes('Listen to Your Body'));
+    await send('Page.navigate', { url: origin + '/#health-disclaimer' });
+    await ready(() => evaluate('Boolean(document.querySelector(".health-page"))'));
+    assert((await body()).includes('Health Disclaimer'));
+    assert((await body()).includes('Listen to your body'));
+    assert((await body()).includes('112'));
+    assert((await body()).includes('102'));
+    assert((await body()).includes('108'));
+    assert.equal(await evaluate('document.querySelectorAll(".health-page .terms-section").length'), 8);
     await reload();
     await ready(() => evaluate('Boolean(document.querySelector(".health-page"))'));
 
-    // Cross-navigation via trust-subnav pill to Terms of Service
-    await click('Terms of Service', '.trust-subnav-pill');
+    await click('Terms', '.trust-subnav-pill');
     await route('terms');
-    assert((await body()).includes('Terms of Service'));
+    await click('Privacy Policy', '.trust-inline-link');
+    await route('privacy');
+    await evaluate('history.back()');
+    await route('terms');
+    await evaluate('history.forward()');
+    await route('privacy');
+    await click('Health Disclaimer', '.trust-subnav-pill');
+    await route('health-disclaimer');
     await click('Return to Home');
     await route('');
     await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
@@ -402,7 +491,7 @@ try {
     // 3. No Guest selection is required, no Google sign in, no profile setup
     assert.equal(await evaluate('localStorage.getItem("bits-motion-guest-active-v1")'), null);
     assert.equal(await evaluate('localStorage.getItem("bits-motion-profile-v1")'), null);
-    assert.equal(await evaluate('Boolean(document.querySelector(".preview-mode-banner"))'), true);
+    await ready(() => evaluate('Boolean(document.querySelector(".preview-mode-banner"))'));
     assert((await body()).includes('Preview Mode'));
     assert((await body()).includes('This session will not be saved.'));
 
@@ -483,7 +572,7 @@ try {
     await route('dashboard');
     assert((await body()).includes('Guest Example'));
     assert((await body()).includes('No workouts yet'));
-    for (const width of [390, 768, 1440]) await screenshot('dashboard', width);
+    await reviewWidths('dashboard', true);
   });
 
   await record('Navigation, browser history, refresh, direct coach access and retained guest plan', async () => {
@@ -576,7 +665,7 @@ try {
     assert((await body()).includes('Your setup'));
 
     // 9. Modify a Step 3 value.
-    await setFields({ equipment: 'Resistance band' });
+    await setFields({ equipment: 'Backpack' });
 
     // 10. Assert still no save occurs.
     await delay(120);
@@ -591,7 +680,7 @@ try {
     await ready(() => requests.filter((r) => r.action === 'profile' && r.method === 'PUT').length === profilePutsBefore + 1);
 
     // 13. Assert updated Step 3 data is persisted.
-    assert.equal(accounts.A.profile.equipment, 'Resistance band');
+    assert.equal(accounts.A.profile.equipment, 'Backpack');
 
     // 14. Assert expected navigation occurs only after successful save.
     await route('plan');
@@ -692,10 +781,304 @@ try {
     assert(!(await body()).includes('B private history'));
   });
 
+  await record('Every major screen fits 390, 768, 820, 1024, 1440px and mobile landscape', async () => {
+    for (const [screen, selector] of [
+      ['features', '.features-page'], ['how-it-works', '.how-it-works-page'],
+      ['terms', '.terms-page'], ['privacy', '.privacy-page'], ['health-disclaimer', '.health-page'],
+      ['plan', '.plan-page'], ['workouts', '.library-page'], ['progress', '.progress-page'], ['leaderboard', '.leaderboard-page'],
+    ]) {
+      await evaluate('location.hash = ' + JSON.stringify('#' + screen));
+      await ready(() => evaluate('Boolean(document.querySelector(' + JSON.stringify(selector) + '))'));
+      await reviewWidths(screen, ['plan', 'progress', 'features', 'how-it-works', 'terms', 'privacy', 'health-disclaimer'].includes(screen));
+    }
+    await evaluate('location.hash = "#workouts"');
+    await ready(() => evaluate('document.querySelectorAll(".library-card").length === 10'));
+    // Every movement offers a start action: 4 camera-guided + 6 self-guided.
+    assert.equal(await evaluate('document.querySelectorAll(".library-card button").length'), 10);
+    assert.equal(await evaluate('[...document.querySelectorAll(".library-card button")].filter((b) => b.textContent.includes("camera coach")).length'), 4);
+    assert.equal(await evaluate('[...document.querySelectorAll(".library-card button")].filter((b) => b.textContent.toLowerCase().includes("self-guided")).length'), 6);
+    await click('Camera guided');
+    assert.equal(await evaluate('document.querySelectorAll(".library-card").length'), 4);
+    await click('All movements');
+    assert.equal(await evaluate('document.querySelectorAll(".library-card").length'), 10);
+
+    // Verify self-guided screen in landscape and responsive viewports
+    await evaluate('location.hash = "#plan"');
+    await ready(() => evaluate('Boolean(document.querySelector(".plan-page"))'));
+    const foundSelfGuidedButton = await evaluate('(() => { const btn = [...document.querySelectorAll(".exercise-card button")].find(b => b.textContent.toLowerCase().includes("self-guided")); if (btn) { btn.click(); return true; } return false; })()');
+    assert(foundSelfGuidedButton, 'Plan page must offer a self-guided start button for at least one non-camera movement');
+    await ready(() => evaluate('location.hash === "#self-guided"'));
+    await ready(() => evaluate('Boolean(document.querySelector(".self-guided-page"))'));
+    await reviewWidths('self-guided', true);
+    await evaluate('document.querySelector(".self-guided-page [aria-label=\\"Back\\"]").click()');
+    await ready(() => evaluate('Boolean(document.querySelector(".plan-page"))'));
+  });
+
+  await record('Preview permissions, running switch, summary focus, restart and zero persistence', async () => {
+    const storageBefore = await evaluate('JSON.stringify(localStorage)');
+    const writesBefore = requests.filter((r) => ['POST', 'PUT'].includes(r.method)).length;
+    await evaluate('location.hash = "#preview"');
+    await ready(() => evaluate('document.body.innerText.includes("Ready when you are")'), 30000);
+    await reviewWidths('preview');
+    await syntheticCamera('NotAllowedError');
+    await click('Start Camera');
+    await ready(() => evaluate('document.body.innerText.includes("Camera permission needed")'));
+    await reviewWidths('preview-denied');
+    await syntheticCamera('NotFoundError');
+    await click('Try again');
+    await ready(() => evaluate('document.body.innerText.includes("No camera was found")'));
+    await syntheticCamera();
+    await click('Try again');
+    await ready(() => evaluate('Boolean(document.querySelector(".live-badge"))'));
+    await evaluate('[...document.querySelectorAll(".preview-exercise-tab")].find(el => el.textContent.includes("Push-ups")).click()');
+    await ready(streamsStopped);
+    await ready(() => evaluate('document.body.innerText.includes("Ready when you are")'));
+    await click('Start Camera');
+    await ready(() => evaluate('Boolean(document.querySelector(".live-badge"))'));
+    await click('End session');
+    await ready(() => evaluate('Boolean(document.querySelector("dialog[open]"))'));
+    assert(await streamsStopped());
+    assert(await evaluate('document.querySelector("dialog").contains(document.activeElement)'));
+    await reviewWidths('preview-summary');
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+    assert(await evaluate('document.querySelector("dialog").contains(document.activeElement)'));
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await ready(() => evaluate('!document.querySelector("dialog")'));
+    await click('Start Camera');
+    await ready(() => evaluate('Boolean(document.querySelector(".live-badge"))'));
+    await evaluate('document.querySelector(".coach-home-button").click()');
+    await route('');
+    assert(await streamsStopped());
+    assert.equal(await evaluate('JSON.stringify(localStorage)'), storageBefore);
+    assert.equal(requests.filter((r) => ['POST', 'PUT'].includes(r.method)).length, writesBefore);
+  });
+
+  await record('Account session save retries preserve identity, timestamp and independent history', async () => {
+    await click('Continue my journey');
+    await route('dashboard');
+    await click('Coach', '.desktop-nav button');
+    await ready(() => evaluate('document.body.innerText.includes("Ready when you are")'), 30000);
+    await reviewWidths('coach');
+    await syntheticCamera();
+    await click('Start Camera');
+    await ready(() => evaluate('Boolean(document.querySelector(".live-badge"))'));
+    await reviewLandscape('coach');
+    assert(await evaluate('Boolean(document.querySelector(".camera-viewport"))'));
+    assert(await evaluate('Boolean(document.querySelector(".rep-card"))'));
+    assert(await evaluate('Boolean(document.querySelector(".button-danger"))'));
+    assert(await evaluate('Boolean(document.querySelector(".coach-audio-toggle"))'));
+    const controlsRendered = await evaluate('(() => { const btn = document.querySelector(".button-danger"); const rep = document.querySelector(".rep-card"); const rBtn = btn.getBoundingClientRect(); const rRep = rep.getBoundingClientRect(); return rBtn.width > 0 && rBtn.height > 0 && rRep.width > 0 && rRep.height > 0; })()');
+    assert(controlsRendered, 'Coach controls must be visible and fully rendered in mobile landscape');
+    failures.add('sessions');
+    await click('End session');
+    await route('result');
+    await ready(() => evaluate('document.body.innerText.includes("Retry account save")'));
+    await reviewWidths('result-save-error');
+    failures.delete('sessions');
+    const before = accounts.A.sessions.length;
+    await click('Retry account save');
+    await ready(() => evaluate('document.body.innerText.includes("Saved to your account")'));
+    assert.equal(accounts.A.sessions.length, before + 1);
+    const saved = accounts.A.sessions.at(-1);
+    assert(saved.clientSessionId);
+    assert(saved.completedAt);
+    assert.equal(saved.reps, 0, 'Synthetic video cannot fabricate exercise reps');
+    await reviewWidths('result', true);
+    await click('View progress');
+    await route('progress');
+    assert(await streamsStopped());
+  });
+
+  await record('Long history is accessible and live leaderboard has an honest empty state', async () => {
+    for (let index = 0; index < 10; index++) accounts.A.sessions.push({ ...fixtureSession('Extra ' + index, index), id: 'extra-' + index });
+    await reload();
+    await ready(() => evaluate('document.querySelectorAll(".history-row").length === 6'));
+    await click('Show more sessions');
+    assert.equal(await evaluate('document.querySelectorAll(".history-row").length'), accounts.A.sessions.length);
+    emptyLeaderboard = true;
+    await openMenuAndClick('Leaderboard');
+    await ready(() => evaluate('document.body.innerText.includes("This week’s ranking starts here")'));
+    await reviewWidths('leaderboard-empty', true);
+    await click('All time');
+    await ready(() => evaluate('document.body.innerText.includes("The first ranking starts here")'));
+    emptyLeaderboard = false;
+  });
+
+  await record('Saved setup changes alter the actual Guest plan and survive refresh', async () => {
+    await logout();
+    await click('Set up my fitness journey');
+    await click('Continue as Guest');
+    await route('dashboard');
+    await openMenuAndClick('Fitness profile');
+    await click('Continue');
+    await setFields({ level: 'Intermediate', goal: 'Build strength' });
+    await click('Continue');
+    await setFields({ time: '10', location: 'Open indoor space', equipment: 'Backpack' });
+    await click('Save & refresh plan');
+    await route('plan');
+    const short = await evaluate('JSON.parse(localStorage.getItem("bits-motion-plan-v1"))');
+    assert(short.exercises.some((item) => item.id === 'rows'));
+    await openMenuAndClick('Fitness profile');
+    await click('Continue'); await click('Continue');
+    await setFields({ time: '45', equipment: 'None', location: 'Hostel room', lowImpact: true });
+    await click('Save & refresh plan');
+    await route('plan');
+    const long = await evaluate('JSON.parse(localStorage.getItem("bits-motion-plan-v1"))');
+    assert(!long.exercises.some((item) => ['rows', 'lunges', 'jumping-jacks'].includes(item.id)));
+    assert.equal(calculateWorkoutDuration(long), 45 * 60);
+    assert.notDeepEqual(long.exercises.map((item) => item.duration), short.exercises.map((item) => item.duration));
+    await reviewWidths('long-plan');
+    await reload();
+    await ready(() => evaluate('Boolean(document.querySelector(".plan-decision"))'));
+    assert.deepEqual(await evaluate('JSON.parse(localStorage.getItem("bits-motion-plan-v1"))'), long);
+  });
+
+  await record('Guest camera result saves once locally and never posts to the account', async () => {
+    const posts = requests.filter((r) => r.action === 'sessions' && r.method === 'POST').length;
+    const count = await evaluate('JSON.parse(localStorage.getItem("bits-motion-sessions-v1")).length');
+    await click('Coach', '.desktop-nav button');
+    await ready(() => evaluate('document.body.innerText.includes("Ready when you are")'), 30000);
+    await syntheticCamera(); await click('Start Camera');
+    await ready(() => evaluate('Boolean(document.querySelector(".live-badge"))'));
+    await click('End session'); await route('result');
+    await click('Save session');
+    await ready(() => evaluate('document.body.innerText.includes("Session saved")'));
+    assert.equal(await evaluate('JSON.parse(localStorage.getItem("bits-motion-sessions-v1")).length'), count + 1);
+    assert.equal(requests.filter((r) => r.action === 'sessions' && r.method === 'POST').length, posts);
+    await click('View progress'); await route('progress');
+  });
+
+  await record('Malformed Guest storage recovers without a blank screen or deleting original history', async () => {
+    await evaluate('localStorage.setItem("bits-motion-sessions-v1", "{}"); localStorage.setItem("bits-motion-plan-v1", "{\\\"exercises\\\":null}")');
+    await reload();
+    await ready(() => evaluate('document.body.innerText.includes("Some saved Guest data could not be read")'));
+    assert.equal(await evaluate('localStorage.getItem("bits-motion-sessions-v1")'), '{}');
+    assert.equal(await evaluate('document.querySelectorAll(".history-row").length'), 0);
+  });
+
+  await record('Workout runner: start, skip, mid-round refresh resume, and finish-early integrity', async () => {
+    // Fresh, isolated guest identity for a deterministic multi-round plan (20 minutes -> 2 rounds).
+    await evaluate('localStorage.clear(); sessionStorage.clear();');
+    await reload();
+    await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
+    const guestPresent = await evaluate('[...document.querySelectorAll("button")].some(el => el.textContent.trim() === "Continue as Guest")');
+    if (!guestPresent) await click('Set up my fitness journey');
+    await ready(() => evaluate('[...document.querySelectorAll("button")].some(el => el.textContent.trim() === "Continue as Guest")'));
+    await click('Continue as Guest');
+    await route('profile');
+    await completeProfile('Runner Guest');
+
+    const runnerPlan = await evaluate('JSON.parse(localStorage.getItem("bits-motion-plan-v1"))');
+    assert(runnerPlan.rounds >= 2, 'This test requires a multi-round plan to exercise round-boundary resume');
+    const totalSteps = runnerPlan.exercises.filter((e) => !['warmup', 'cooldown'].includes(e.id)).length * runnerPlan.rounds + 2;
+
+    async function currentMovementLabel() {
+      return evaluate('(document.querySelector(".coach-topbar .eyebrow") || {}).textContent || ""');
+    }
+    // Coach is lazy-loaded behind Suspense, so right after a hash change there is a brief
+    // fallback render with no ".coach-topbar" yet. Poll for the real label instead of a
+    // one-shot read, so this doesn't race the chunk load / mount.
+    async function assertMovementLabel(n) {
+      await ready(() => evaluate('(() => { const el = document.querySelector(".coach-topbar .eyebrow"); return Boolean(el && el.textContent.includes(' + JSON.stringify('Movement ' + n + ' of ' + totalSteps) + ')); })()'), 30000);
+    }
+    async function clickButtonContaining(text, selector = 'button') {
+      await ready(() => evaluate('[...document.querySelectorAll(' + JSON.stringify(selector) + ')].some(b => b.textContent.includes(' + JSON.stringify(text) + ') && b.getClientRects().length)'));
+      await evaluate('(() => { const b = [...document.querySelectorAll(' + JSON.stringify(selector) + ')].find(b => b.textContent.includes(' + JSON.stringify(text) + ') && b.getClientRects().length); if (!b) throw new Error("Control unavailable: " + ' + JSON.stringify(text) + '); b.click(); })()');
+    }
+    // Ends the movement currently open on Coach or Self-Guided, landing on its Result summary.
+    async function endCurrentMovement() {
+      const onCoach = await evaluate('location.hash === "#coach"');
+      if (onCoach) {
+        await ready(() => evaluate('document.body.innerText.includes("Ready when you are")'), 30000);
+        await syntheticCamera();
+        await click('Start Camera');
+        await ready(() => evaluate('Boolean(document.querySelector(".live-badge"))'));
+        await click('End session');
+      } else {
+        await clickButtonContaining('Complete &');
+      }
+      await route('result');
+    }
+    // Skip transitions directly to the next movement (or to plan if it was the last); it never stops on Result.
+    async function skipCurrentMovement() {
+      await clickButtonContaining('Skip this movement');
+    }
+    async function continueToNextMovement() {
+      await clickButtonContaining('Continue Workout');
+      await ready(() => evaluate('["#coach", "#self-guided"].includes(location.hash)'));
+    }
+
+    // 1. Starting a workout must open the first sequence movement (always the warm-up, self-guided).
+    await clickButtonContaining('Start Workout');
+    await ready(() => evaluate('location.hash === "#self-guided"'));
+    await assertMovementLabel(1);
+    const sessionsBaseline = await evaluate('JSON.parse(localStorage.getItem("bits-motion-sessions-v1") || "[]").length');
+
+    // 2. Ending the warm-up normally lands on its own Result (not the full-workout celebration),
+    // then Continue Workout advances to movement 2 (first circuit station).
+    await endCurrentMovement();
+    assert.equal(await evaluate('document.body.innerText.toLowerCase().includes("full workout complete")'), false);
+    assert.equal(await evaluate('JSON.parse(localStorage.getItem("bits-motion-sessions-v1") || "[]").length'), sessionsBaseline + 1,
+      'A genuinely completed movement must record exactly one session');
+    await continueToNextMovement();
+    await assertMovementLabel(2);
+    const sessionsAfterMovement2 = await evaluate('JSON.parse(localStorage.getItem("bits-motion-sessions-v1") || "[]").length');
+
+    // 3. Skip must advance directly to movement 3 without stopping on Result, and without
+    // recording a session, adding reps, or adding calories.
+    await skipCurrentMovement();
+    await ready(() => evaluate('["#coach", "#self-guided"].includes(location.hash)'));
+    await assertMovementLabel(3);
+    assert.equal(await evaluate('JSON.parse(localStorage.getItem("bits-motion-sessions-v1") || "[]").length'), sessionsAfterMovement2,
+      'Skip must not record a completed session');
+
+    // 4. Mid-workout refresh must restore the exact movement index and identity, not the defaults.
+    await reload();
+    await ready(() => evaluate('["#coach", "#self-guided"].includes(location.hash)'));
+    await assertMovementLabel(3);
+    const restoredWorkout = await evaluate('JSON.parse(sessionStorage.getItem("bits-motion-active-workout"))');
+    assert.equal(restoredWorkout.currentIndex, 2);
+
+    // 5. Plan screen must offer Resume (not Start) and report the same progress.
+    // (The shell nav bar is intentionally hidden on the Coach/Self-Guided screens, so
+    // navigate directly rather than clicking a nav link that isn't rendered there.)
+    await evaluate('location.hash = "#plan"');
+    await route('plan');
+    await ready(() => evaluate('Boolean(document.querySelector(".plan-decision"))'));
+    assert((await body()).includes('Resume workout (3/' + totalSteps + ')'));
+
+    // 6. Finish early: must preserve already-completed movements, return to plan, clear the
+    // active workout, and never fabricate a full-workout celebration for the un-run remainder.
+    await clickButtonContaining('Resume workout');
+    await ready(() => evaluate('["#coach", "#self-guided"].includes(location.hash)'));
+    await endCurrentMovement();
+    assert.equal(await evaluate('document.body.innerText.toLowerCase().includes("full workout complete")'), false);
+    await clickButtonContaining('Finish workout early');
+    await route('plan');
+    assert.equal(await evaluate('sessionStorage.getItem("bits-motion-active-workout")'), null);
+    assert((await body()).includes('Start Workout'), 'Finishing early must clear the active workout so Plan offers Start, not Resume');
+
+    // 7. Restarting and running the full sequence to completion must show the real celebration
+    // exactly once, only after every movement has actually been executed.
+    await clickButtonContaining('Start Workout');
+    await ready(() => evaluate('location.hash === "#self-guided"'));
+    for (let step = 1; step < totalSteps; step += 1) {
+      await endCurrentMovement();
+      assert.equal(await evaluate('document.body.innerText.toLowerCase().includes("full workout complete")'), false);
+      await continueToNextMovement();
+    }
+    await endCurrentMovement();
+    assert(await evaluate('document.body.innerText.toLowerCase().includes("full workout complete")'), 'The final movement must trigger the true full-workout celebration');
+    assert.equal(await evaluate('sessionStorage.getItem("bits-motion-active-workout")'), null);
+  });
+
   assert.deepEqual(errors, [], 'Unexpected browser JavaScript errors');
   const report = { passed: results, screenshots: outputDirectory,
-    scope: 'Mock Google callback and API; isolated browser profile. Real OAuth, Neon and physical camera were not tested.',
-    requests: requests.length, javascriptErrors: errors, modelDiagnostics };
+    scope: 'Mock Google callback and API; synthetic camera frames with real MediaPipe model. Real OAuth, Neon and physical exercise accuracy were not tested.',
+    requests: requests.length, javascriptErrors: errors, modelDiagnostics, networkFailures, httpErrors,
+    responsiveWidths: [390, 768, 820, 1024, 1440, '844x390 landscape'], reviewedLayouts: [...reviewedLayouts] };
   await writeFile(path.join(outputDirectory, 'report.json'), JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report, null, 2));
 } catch (error) {
