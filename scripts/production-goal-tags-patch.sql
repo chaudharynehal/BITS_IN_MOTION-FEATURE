@@ -8,7 +8,7 @@
 --   lunges   is missing 'stay-fit'
 --
 -- Safety properties:
---   * Additive only: appends a single missing tag with `goal_tags || ARRAY[...]`.
+--   * Additive only: appends a single missing tag to the JSONB array.
 --     Never replaces or reassigns the whole array, so any other tags already
 --     present in production (added manually or by a future migration) are preserved.
 --   * Idempotent: the WHERE clause guards on the tag being absent, so running
@@ -26,16 +26,16 @@ SELECT id, goal_tags FROM exercises WHERE id IN ('pushups', 'crunches', 'lunges'
 
 -- 2. Additive, idempotent patch.
 UPDATE exercises
-SET goal_tags = goal_tags || ARRAY['weight-management']
-WHERE id = 'pushups' AND NOT ('weight-management' = ANY(goal_tags));
+SET goal_tags = goal_tags || '["weight-management"]'::jsonb
+WHERE id = 'pushups' AND NOT (goal_tags ? 'weight-management');
 
 UPDATE exercises
-SET goal_tags = goal_tags || ARRAY['weight-management']
-WHERE id = 'crunches' AND NOT ('weight-management' = ANY(goal_tags));
+SET goal_tags = goal_tags || '["weight-management"]'::jsonb
+WHERE id = 'crunches' AND NOT (goal_tags ? 'weight-management');
 
 UPDATE exercises
-SET goal_tags = goal_tags || ARRAY['stay-fit']
-WHERE id = 'lunges' AND NOT ('stay-fit' = ANY(goal_tags));
+SET goal_tags = goal_tags || '["stay-fit"]'::jsonb
+WHERE id = 'lunges' AND NOT (goal_tags ? 'stay-fit');
 
 -- 3. Verify.
 SELECT id, goal_tags FROM exercises WHERE id IN ('pushups', 'crunches', 'lunges');
@@ -45,14 +45,14 @@ SELECT id, goal_tags FROM exercises WHERE id IN ('pushups', 'crunches', 'lunges'
 -- because it only removes the specific tag this patch adds, and is a no-op if
 -- the tag is already absent):
 --
--- UPDATE exercises SET goal_tags = array_remove(goal_tags, 'weight-management') WHERE id = 'pushups';
--- UPDATE exercises SET goal_tags = array_remove(goal_tags, 'weight-management') WHERE id = 'crunches';
--- UPDATE exercises SET goal_tags = array_remove(goal_tags, 'stay-fit') WHERE id = 'lunges';
+-- UPDATE exercises SET goal_tags = goal_tags - 'weight-management' WHERE id = 'pushups';
+-- UPDATE exercises SET goal_tags = goal_tags - 'weight-management' WHERE id = 'crunches';
+-- UPDATE exercises SET goal_tags = goal_tags - 'stay-fit' WHERE id = 'lunges';
 --
 -- If step 1's captured pre-patch values differ from a plain tag removal
 -- (e.g. tag order matters to another consumer), restore the exact captured
 -- arrays instead:
 --
--- UPDATE exercises SET goal_tags = '{<captured value>}'::text[] WHERE id = 'pushups';
--- UPDATE exercises SET goal_tags = '{<captured value>}'::text[] WHERE id = 'crunches';
--- UPDATE exercises SET goal_tags = '{<captured value>}'::text[] WHERE id = 'lunges';
+-- UPDATE exercises SET goal_tags = '<captured JSON array>'::jsonb WHERE id = 'pushups';
+-- UPDATE exercises SET goal_tags = '<captured JSON array>'::jsonb WHERE id = 'crunches';
+-- UPDATE exercises SET goal_tags = '<captured JSON array>'::jsonb WHERE id = 'lunges';
