@@ -1,12 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Camera, CircleStop, Info, LoaderCircle, RefreshCw, RotateCcw, ShieldCheck, TriangleAlert, VideoOff } from 'lucide-react';
+import { ArrowLeft, Camera, CheckCircle2, CircleStop, Info, LoaderCircle, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, TriangleAlert, VideoOff } from 'lucide-react';
 import { getCameraErrorState, isCameraSupported, startCamera, stopCamera } from '../vision/camera';
 import { clearPoseOverlay, drawPoseOverlay, initializePoseLandmarker } from '../vision/poseLandmarker';
 import { createExerciseDetector, DETECTOR_CONFIGS } from '../vision/exerciseDetectors';
 
 const INITIAL_FEEDBACK = { key: 'initial', message: 'Keep your full body visible and follow the setup guide', tone: 'neutral', priority: 0, until: 0 };
 
-export default function CoachScreen({ exerciseId = 'squats', onBack, onHome, onEndSession }) {
+const CAMERA_EXERCISES = [
+  { id: 'squats', name: 'Squats', detail: 'Knee angle' },
+  { id: 'pushups', name: 'Push-ups', detail: 'Elbow angle' },
+  { id: 'crunches', name: 'Crunches', detail: 'Torso angle' },
+  { id: 'jumping-jacks', name: 'Jumping Jacks', detail: 'Stance width' },
+];
+
+export default function CoachScreen({
+  exerciseId = 'squats',
+  onBack,
+  onHome,
+  onEndSession,
+  previewMode = false,
+  onSelectExercise,
+}) {
   const detectorConfig = DETECTOR_CONFIGS[exerciseId] || DETECTOR_CONFIGS.squats;
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -34,6 +48,7 @@ export default function CoachScreen({ exerciseId = 'squats', onBack, onHome, onE
   const [measurementUnit, setMeasurementUnit] = useState('°');
   const [feedback, setFeedback] = useState(INITIAL_FEEDBACK);
   const [videoAspect, setVideoAspect] = useState(4 / 3);
+  const [previewSummary, setPreviewSummary] = useState(null);
 
   const publishFeedback = useCallback((cue) => {
     const now = performance.now();
@@ -60,6 +75,7 @@ export default function CoachScreen({ exerciseId = 'squats', onBack, onHome, onE
     setMeasurementValue(null);
     setMeasurementUnit(exerciseId === 'jumping-jacks' ? '×' : '°');
     setFeedback(INITIAL_FEEDBACK);
+    setPreviewSummary(null);
   }, [exerciseId]);
 
   const loadModel = useCallback(async () => {
@@ -199,12 +215,22 @@ export default function CoachScreen({ exerciseId = 'squats', onBack, onHome, onE
       ? Math.max(1, Math.round((Date.now() - sessionStartedAtRef.current) / 1000))
       : 0;
     stopSessionCamera();
+
+    if (previewMode) {
+      setPreviewSummary({
+        reps,
+        durationSeconds,
+        exerciseName: detectorConfig.name.replace(' coach', ''),
+      });
+      return;
+    }
+
     const formSummary = reps === 0
       ? `No complete ${detectorConfig.name.toLowerCase()} movement cycle was captured yet.`
       : framingInterruptionsRef.current === 0
         ? `Completed ${reps} stable, visibility-qualified ${reps === 1 ? 'repetition' : 'repetitions'}.`
         : `Completed ${reps} ${reps === 1 ? 'repetition' : 'repetitions'} with ${framingInterruptionsRef.current} framing ${framingInterruptionsRef.current === 1 ? 'reminder' : 'reminders'}.`;
-    onEndSession({
+    onEndSession?.({
       exerciseId,
       exerciseName: detectorConfig.name.replace(' coach', ''),
       reps,
@@ -235,15 +261,48 @@ export default function CoachScreen({ exerciseId = 'squats', onBack, onHome, onE
   const isRunning = cameraStatus === 'running';
 
   return (
-    <main className="coach-page">
+    <main className={'coach-page ' + (previewMode ? 'coach-page-preview' : '')}>
+      {previewMode && (
+        <div className="preview-mode-banner" role="status">
+          <span className="preview-mode-pill"><ShieldAlert size={14} /> Preview Mode</span>
+          <span>This session will not be saved. Try on-device pose detection freely.</span>
+        </div>
+      )}
+
       <div className="coach-topbar">
         <div className="coach-navigation">
           <button className="icon-button icon-button-dark" onClick={handleBack} aria-label="Back to previous screen"><ArrowLeft size={21} /></button>
           <button className="coach-home-button" type="button" onClick={handleHome} aria-label="Go to BITS in Motion homepage"><img src="/logo.png" alt="" /><span>Home</span></button>
         </div>
-        <div><span className="eyebrow light">Live {detectorConfig.name}</span><small>Basic observable pose feedback</small></div>
+        <div>
+          <span className="eyebrow light">{previewMode ? 'Camera Coach Preview' : `Live ${detectorConfig.name}`}</span>
+          <small>{previewMode ? detectorConfig.name : 'Basic observable pose feedback'}</small>
+        </div>
         <button className="coach-reset" onClick={handleReset} disabled={!isRunning}><RotateCcw size={17} /> Reset</button>
       </div>
+
+      {previewMode && (
+        <div className="preview-exercise-nav" role="tablist" aria-label="Select camera exercise to preview">
+          {CAMERA_EXERCISES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={exerciseId === item.id}
+              className={'preview-exercise-tab ' + (exerciseId === item.id ? 'active' : '')}
+              onClick={() => {
+                if (exerciseId !== item.id) {
+                  stopSessionCamera();
+                  onSelectExercise?.(item.id);
+                }
+              }}
+            >
+              <strong>{item.name}</strong>
+              <small>{item.detail}</small>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="coach-layout">
         <section className="camera-panel">
@@ -281,6 +340,41 @@ export default function CoachScreen({ exerciseId = 'squats', onBack, onHome, onE
           <button className="button button-danger" onClick={handleEnd} disabled={!isRunning}><CircleStop size={18} /> End session</button>
         </aside>
       </div>
+
+      {previewSummary && (
+        <div className="preview-summary-modal" role="dialog" aria-modal="true" aria-label="Preview summary">
+          <div className="preview-summary-card">
+            <div className="preview-summary-icon"><CheckCircle2 size={38} /></div>
+            <h2>Preview Completed</h2>
+            <p>
+              You completed <strong>{previewSummary.reps} {previewSummary.reps === 1 ? 'rep' : 'reps'}</strong> of {previewSummary.exerciseName} in {previewSummary.durationSeconds}s.
+            </p>
+            <div className="preview-summary-note">
+              <ShieldCheck size={18} />
+              <span>Preview Mode: This session was not recorded or saved to any account or storage.</span>
+            </div>
+            <div className="preview-summary-actions">
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={() => {
+                  setPreviewSummary(null);
+                  handleReset();
+                }}
+              >
+                <RotateCcw size={17} /> Try another movement
+              </button>
+              <button
+                className="button button-primary"
+                type="button"
+                onClick={handleHome}
+              >
+                Return to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
