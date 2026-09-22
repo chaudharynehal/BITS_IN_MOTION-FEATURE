@@ -1,25 +1,28 @@
 # BITS in Motion — Current Project State
 
 ## Current Repository State
-- **Branch**: `tisha-db` (target / base: `feature/google-auth-user-database`)
+- **Branch**: `feature/google-auth-user-database`
 - **Current Live Repository HEAD**: Dynamic — inspect dynamically at session start using Git (`git rev-parse HEAD`). Git is authoritative for live HEAD.
-- **Base Branch Checkpoint**: `3df8d72` (PR #3 merge commit) / `428e95d` (Homepage UX feature commit)
-- **Contributor Feature Commit**: `b9a38fe83a861a300837acd4549d19c1f28e90b4` (authored by Tisha)
-- **PR**: PR #1 (`tisha-db` -> `feature/google-auth-user-database`)
-- **Origin Synchronization**: Synchronized with latest `origin/feature/google-auth-user-database`
-- **Working Tree State**: Cleaned branch retaining Tisha's original feature commit, with generator/workbook artifacts removed and base merged.
+- **Last Application/Source Checkpoint**: `46c8f6d` (PR #1 merge commit)
+- **Origin Synchronization**: Synchronized with `origin/feature/google-auth-user-database`
+- **Branch Topology**: Authoritative branch is `feature/google-auth-user-database`. No local `main` branch exists; no remote `origin/main` branch exists.
+- **Working Tree State**: Clean. Tisha's personalization contribution (PR #1) has been merged and verified.
 - **Note on Commit Hashes**: Stored commit hashes in this document describe meaningful application/deployment checkpoints, not necessarily the latest documentation-only repository commit.
 
 ## Production State
 - **Production URL**: `https://bits-in-motion-feature.vercel.app`
-- **Production Application Checkpoint**: `a52af438d76ab2792059f9ecd27125122917c5f9`
-- **Deployment Status**: Production is fully deployed and verified live on Vercel at `https://bits-in-motion-feature.vercel.app` matching checkpoint `a52af43` (assets `index-BjUcaeCQ.js`, `index-BMIMgdvC.css`, `CoachScreen-CbEh4cX8.js`).
+- **Production Application Checkpoint**: `46c8f6d26070cb43a5afdb5b1c1c0bc32251d9e9`
+- **Deployment Status**: Production is fully deployed and verified live on Vercel at `https://bits-in-motion-feature.vercel.app` matching checkpoint `46c8f6d` (assets `index-BsOr_aia.js`, `index-DC9WbPc-.css`, `CoachScreen-rs_kxYkE.js`).
 - **Google Configuration**: `googleConfigured: true` (verified live via production `/api?action=status`).
 - **Neon Database Configuration**: `databaseConfigured: true` (verified live via production `/api?action=status`).
-- **Database Schema Status**: Production schema is at previous migration state (without `impact` column). The additive `impact` column migration will be applied to database upon release.
+- **Database Schema Status**: Production schema is updated and verified live on Neon database. The additive `impact` column (`TEXT NOT NULL DEFAULT 'low'`) is present and all 10 exercises are active in the catalogue with impact metadata.
 
 ## Last Completed Development
-- **Latest Base Merged Commits**:
+- **Latest Merged Commits**:
+  - `46c8f6d` Merge pull request #1 from chaudharynehal/tisha-db
+  - `7f3af1e` Merge branch 'feature/google-auth-user-database' into tisha-db
+  - `0133088` chore: remove generator script and workbook artifacts from personalization PR
+  - `b9a38fe` feat: add low-impact exercise personalization rules and catalog metadata (Tisha)
   - `3df8d72` Merge pull request #3 from chaudharynehal/feature/homepage-product-polish
   - `3f88db5` docs: record homepage product polish checkpoint 428e95d
   - `428e95d` feat: refine homepage UX, CTA hierarchy, and trust & safety screens
@@ -27,7 +30,7 @@
   - `a52af43` Merge pull request #2 from chaudharynehal/feature/homepage-ux-enhancements
   - `66d90c0` feat: enhance homepage experience and navigation
   - `dab04d0` Fix premature profile save when editing existing completed profile
-- **Tisha Personalization Integration (PR #1 / `tisha-db`)**:
+- **Tisha Personalization Integration (PR #1 Merged)**:
   - **Contributor**: Tisha (`Tishadummy17@gmail.com`)
   - **Original Feature Commit**: `b9a38fe83a861a300837acd4549d19c1f28e90b4`
   - **Core Capabilities**:
@@ -56,24 +59,23 @@
 
 ## Verification
 - **Unit & Integration Tests**: `npm test` — **10 test suites, 56/56 tests passing** (0 errors).
-- **Production Build**: `npm run build` — Vite v6 production build passes cleanly with zero errors or warnings.
+- **Production Build**: `npm run build` — Vite v6 production build passes cleanly in 1.12s with zero errors or warnings.
 - **Browser Verification Suite**: `node scripts/verify-browser.mjs` — **20/20 checks passing** with 0 JavaScript console errors.
+- **Database Post-Migration**: Verified live on Neon PostgreSQL (10 exercises present with impact metadata, 4 users / 4 profiles / 29 plans / 10 sessions / 10 results 100% intact).
+- **Live Production Deployment**: Verified live on Vercel at `https://bits-in-motion-feature.vercel.app/` matching assets `index-BsOr_aia.js` and `index-DC9WbPc-.css`, with `Low-impact marching` and `low-impact movements preferred` confirmed live.
 - **Diff Check**: `git diff --check` — clean (0 whitespace issues).
 
 ## Known Open Issues
 - None.
 
 ## Work In Progress
-- **PR #1 Reconciliation**: Synchronized `tisha-db` with `origin/feature/google-auth-user-database`, preserving Tisha's authorship on commit `b9a38fe`. Awaiting approval to push to `origin/tisha-db`.
+- None. All pending pull requests (PR #1, PR #2, PR #3) are successfully integrated, tested, and live in production.
 
 ## Pending External Contributions
-- **Tisha's PR #1 (`tisha-db`)**: Cleaned and synchronized with latest authoritative base. Ready for final review and merge into `feature/google-auth-user-database`.
+- None. Tisha's PR #1 is merged.
 
 ## Recommended Next Step
-1. Push cleaned/synced `tisha-db` to `origin/tisha-db`.
-2. Confirm PR #1 on GitHub is mergeable and clean.
-3. Review and merge PR #1 on GitHub.
-4. Execute database migration on staging/production and verify live.
+- Ready for end-user testing or next development milestones.
 
 ## Multi-Agent Handoff Protocol
 This repository is developed cooperatively by multiple coding agents (**Codex**, **Gemini / Antigravity**, and **Claude Code**). To avoid regressions and conflicting assumptions:
