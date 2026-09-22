@@ -78,6 +78,7 @@
 ## Multi-Agent Handoff Protocol
 This repository is developed cooperatively by multiple coding agents (**Codex**, **Gemini / Antigravity**, and **Claude Code**). To avoid regressions and conflicting assumptions:
 
+
 1. **Every agent must read `PROJECT_STATE.md` first** before planning or modifying code. `PROJECT_STATE.md` is authoritative for project/handoff state.
 2. **Determine live repository state using Git** (Git is authoritative for live HEAD):
    - `git status`
