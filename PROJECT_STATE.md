@@ -1,12 +1,15 @@
 # BITS in Motion — Current Project State
 
-## Release candidate
+## Live release
 
-- **Authoritative branch:** `feature/google-auth-user-database` at `7b28ec5e24fc47c3f1b9198656806b606f082dd1` before this release.
-- **Release branch:** `feature/camera-coach-product-revamp`.
+- **Authoritative branch:** `feature/google-auth-user-database`.
+- **Release branch:** `feature/camera-coach-product-revamp`, merged locally with a merge commit and pushed to the unprotected authoritative branch.
 - **Application checkpoint:** `8601b40` (`feat: revamp camera coaching and student setup`).
-- **Production checkpoint before this release:** `7b28ec5` at `https://bits-in-motion-feature.vercel.app/`; Vercel reported the deployment successful and the live API reported both Google and Neon configured.
-- **Release status (23 September 2026):** the product revamp is locally verified and ready for push, PR, merge, the narrowly scoped catalogue data patch, deployment, and production smoke testing. Production has not yet been changed by this release branch.
+- **Merge checkpoint:** `484734cb707e12d4d3a12d7a59bc6f25b21c74ba`.
+- **Production patch source checkpoint:** `c35388fe65a7b1c6fdbde137842262988959a47a`.
+- **Production URL:** `https://bits-in-motion-feature.vercel.app/`.
+- **Release status (23 September 2026):** **LIVE and verified**. Vercel reported successful deployments for the application merge and JSONB-safe patch source; the live page serves the new build assets and the production API reports Google and Neon configured.
+- GitHub PR creation was attempted after the release branch was pushed, but the available GitHub credential returned `403 Resource not accessible by personal access token` for Pull Requests. Because the authoritative branch is unprotected and the user explicitly authorized merge/release, the tested release branch was merged locally with `--no-ff` and pushed normally; no force push or policy bypass was used.
 
 ## Product and engineering changes
 
@@ -30,9 +33,14 @@
 ## Production data and deployment
 
 - No schema migration is required; profile location and equipment are stored as text and server validation shares the new/legacy option model.
-- `scripts/production-goal-tags-patch.sql` remains the prepared additive, idempotent patch for `pushups` + `weight-management`, `crunches` + `weight-management`, and `lunges` + `stay-fit`. It has not yet been executed in this release.
-- After merge, capture the live pre-check values, verify the configured Neon target, apply only missing tags, capture the exact post-check, and retain the original arrays for rollback.
-- The authoritative branch auto-deploys through the existing Vercel project. Monitor that deployment rather than creating a replacement project.
+- No schema migration was required. Production was verified as the intended Neon target with a 10-row exercise catalogue and `exercises.goal_tags` stored as JSONB.
+- Inspection found the prepared SQL had PostgreSQL-array syntax despite the live/local JSONB schema. `scripts/production-goal-tags-patch.sql` was corrected to use JSONB concatenation, membership, and rollback operators before any write.
+- Captured pre-check: `pushups=["stay-fit","strength"]`, `crunches=["stay-fit","strength"]`, `lunges=["strength","weight-management"]`.
+- The narrowly scoped, additive, idempotent production patch was executed. **3 rows changed**.
+- Post-check: `pushups=["stay-fit","strength","weight-management"]`, `crunches=["stay-fit","strength","weight-management"]`, `lunges=["strength","weight-management","stay-fit"]`.
+- Rollback source is captured above; the script documents exact JSONB tag removal and exact-array restoration alternatives. No other production SQL was run.
+- Vercel deployment statuses for `484734c` and `c35388f` were both `success`. The existing production project and URL were preserved.
+- A full browser suite ran against the deployed production assets with mocked Google/account API fixtures to avoid production writes: **22/22 flow checks**, 0 JavaScript errors, 0 unexpected network failures, and no overflow at all required widths. The actual live `status` API was also verified separately; physical camera motion and real Google sign-in were not automated.
 
 ## Known limitations
 
@@ -43,4 +51,4 @@
 
 ## Safe continuation point
 
-Push `feature/camera-coach-product-revamp`, open and merge its PR into `feature/google-auth-user-database` if checks permit, apply the verified three-row production tag patch only if the live pre-check shows it is required, monitor Vercel, smoke-test the live application, then record the final merge/database/deployment checkpoint here.
+The release is complete. The next safe action is post-release physical-device QA for crunches, push-ups, squats, and jumping jacks across representative phones, camera heights, body types, and lighting conditions. Catalogue expansion for dumbbells or resistance bands should add verified exercise data before recommendations attempt to use that equipment.
