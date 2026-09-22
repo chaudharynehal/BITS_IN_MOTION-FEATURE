@@ -123,6 +123,10 @@ vi.mock('./db.js', () => ({
             met: exercise.met,
             primary_muscles: exercise.primary_muscles,
             secondary_muscles: exercise.secondary_muscles,
+            goal_tags: exercise.goal_tags,
+            min_level: exercise.min_level,
+            equipment: exercise.equipment,
+            impact: exercise.impact,
           };
         });
     }
@@ -241,7 +245,8 @@ beforeEach(() => {
     id: exercise[0], name: exercise[1], category: exercise[2], duration_label: exercise[3],
     instruction: exercise[4], icon: exercise[5], camera_supported: exercise[6],
     detection_type: exercise[7], met: exercise[8], primary_muscles: exercise[9],
-    secondary_muscles: exercise[10], active: true,
+    secondary_muscles: exercise[10], goal_tags: exercise[11], min_level: exercise[12],
+    equipment: exercise[13], impact: exercise[14], active: true,
   }));
   state.sessions.length = 0;
   state.exerciseResults.clear();

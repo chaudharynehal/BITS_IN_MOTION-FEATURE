@@ -292,6 +292,10 @@ function mapPlanExercise(row) {
     met: Number(row.met),
     primaryMuscles: row.primary_muscles || [],
     secondaryMuscles: row.secondary_muscles || [],
+    goalTags: row.goal_tags || [],
+    minLevel: row.min_level || 'Beginner',
+    equipment: row.equipment || 'None',
+    impact: row.impact || 'low',
   };
 }
 
@@ -305,7 +309,7 @@ async function getLatestPlan(userId) {
     `SELECT pi.exercise_id, pi.target_label, e.name AS exercise_name,
       e.category AS exercise_category, e.instruction AS exercise_instruction,
       e.icon AS exercise_icon, e.camera_supported, e.detection_type, e.met,
-      e.primary_muscles, e.secondary_muscles
+      e.primary_muscles, e.secondary_muscles, e.goal_tags, e.min_level, e.equipment, e.impact
      FROM plan_items pi
      JOIN workout_plans wp ON wp.id=pi.plan_id
      JOIN exercises e ON e.id=pi.exercise_id

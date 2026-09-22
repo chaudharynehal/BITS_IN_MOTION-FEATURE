@@ -24,10 +24,10 @@ async function seedExercises() {
       `INSERT INTO exercises (
         id, name, category, duration_label, instruction, icon, camera_supported,
         detection_type, met, primary_muscles, secondary_muscles, goal_tags,
-        min_level, equipment
+        min_level, equipment, impact
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb,
-        $12::jsonb, $13, $14
+        $12::jsonb, $13, $14, $15
       ) ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name,
         category = EXCLUDED.category,
@@ -41,7 +41,8 @@ async function seedExercises() {
         secondary_muscles = EXCLUDED.secondary_muscles,
         goal_tags = EXCLUDED.goal_tags,
         min_level = EXCLUDED.min_level,
-        equipment = EXCLUDED.equipment`,
+        equipment = EXCLUDED.equipment,
+        impact = EXCLUDED.impact`,
       [
         ...exercise.slice(0, 9),
         JSON.stringify(exercise[9]),
@@ -49,6 +50,7 @@ async function seedExercises() {
         JSON.stringify(exercise[11]),
         exercise[12],
         exercise[13],
+        exercise[14],
       ],
     );
   }
