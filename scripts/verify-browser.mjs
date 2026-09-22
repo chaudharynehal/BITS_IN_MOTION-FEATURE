@@ -234,6 +234,16 @@ try {
   }
   async function login(key) {
     await evaluate('window.__smokeAccount = ' + JSON.stringify(key));
+    const googlePresent = await evaluate('[...document.querySelectorAll("button")].some(el => el.textContent === "Continue with Google")');
+    if (!googlePresent) {
+      const hasSetup = await evaluate('[...document.querySelectorAll("button")].some(el => el.textContent.trim().startsWith("Set up my fitness journey"))');
+      if (hasSetup) {
+        await click('Set up my fitness journey');
+      } else {
+        const hasSignIn = await evaluate('Boolean(document.querySelector(".nav-signin-button"))');
+        if (hasSignIn) await evaluate('document.querySelector(".nav-signin-button").click()');
+      }
+    }
     await ready(() => evaluate('[...document.querySelectorAll("button")].some(el => el.textContent === "Continue with Google")'));
     await click('Continue with Google');
     await ready(() => evaluate('["#profile", "#dashboard"].includes(location.hash)'));
@@ -301,6 +311,9 @@ try {
   });
 
   await record('One Google/Guest choice and public leaderboard navigation', async () => {
+    assert.equal(await evaluate('Boolean(document.querySelector(".nav-signin-button"))'), true);
+    assert.equal(await evaluate('Boolean(document.querySelector(".auth-choice-expanded"))'), false);
+    await click('Set up my fitness journey');
     await ready(() => evaluate('[...document.querySelectorAll("button")].some(el => el.textContent === "Continue with Google")'));
     assert.equal(await evaluate('[...document.querySelectorAll("button")].filter(el => el.textContent.trim() === "Continue as Guest").length'), 1);
     for (const width of [390, 768, 1440]) await screenshot('home', width);
@@ -338,9 +351,33 @@ try {
 
     await click('Terms & Conditions', '.marketing-nav button');
     await route('terms');
-    assert((await body()).includes('Terms of Service & Privacy Policy'));
+    assert((await body()).includes('Terms of Service'));
     await reload();
     await ready(() => evaluate('Boolean(document.querySelector(".terms-page"))'));
+    await click('Return to Home');
+    await route('');
+    await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
+
+    // Test Privacy Policy screen navigation via footer
+    await click('Privacy Policy', '.welcome-footer button');
+    await route('privacy');
+    assert((await body()).includes('Privacy Policy'));
+    assert((await body()).includes('Zero Video Upload'));
+    await reload();
+    await ready(() => evaluate('Boolean(document.querySelector(".privacy-page"))'));
+
+    // Cross-navigation via trust-subnav pill to Health Disclaimer
+    await click('Health Disclaimer', '.trust-subnav-pill');
+    await route('health-disclaimer');
+    assert((await body()).includes('Health & Safety Disclaimer'));
+    assert((await body()).includes('Listen to Your Body'));
+    await reload();
+    await ready(() => evaluate('Boolean(document.querySelector(".health-page"))'));
+
+    // Cross-navigation via trust-subnav pill to Terms of Service
+    await click('Terms of Service', '.trust-subnav-pill');
+    await route('terms');
+    assert((await body()).includes('Terms of Service'));
     await click('Return to Home');
     await route('');
     await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
@@ -355,18 +392,21 @@ try {
   });
 
   await record('Anonymous Camera Preview: logged-out direct access, zero persistence, and safe exit', async () => {
-    // 1. Logged-out visitor clicking 'Camera-guided movement' opens preview directly
-    await click('Camera-guided movement');
+    // 1. Verify duplicate "Camera-guided movement" button is removed
+    assert.equal(await evaluate('Boolean(document.querySelector(".camera-guided-cta") || [...document.querySelectorAll("button")].some(el => el.textContent.trim() === "Camera-guided movement"))'), false);
+
+    // 2. Logged-out visitor clicking 'Live Camera Coach' opens preview directly
+    await click('Live Camera Coach');
     await route('preview');
 
-    // 2. No Guest selection is required, no Google sign in, no profile setup
+    // 3. No Guest selection is required, no Google sign in, no profile setup
     assert.equal(await evaluate('localStorage.getItem("bits-motion-guest-active-v1")'), null);
     assert.equal(await evaluate('localStorage.getItem("bits-motion-profile-v1")'), null);
     assert.equal(await evaluate('Boolean(document.querySelector(".preview-mode-banner"))'), true);
     assert((await body()).includes('Preview Mode'));
     assert((await body()).includes('This session will not be saved.'));
 
-    // 3. Only camera-supported exercises are exposed
+    // 4. Only camera-supported exercises are exposed
     const exposedExercises = await evaluate(`[...document.querySelectorAll('.preview-exercise-tab')].map(el => el.textContent.trim())`);
     assert.equal(exposedExercises.length, 4);
     assert(exposedExercises.some(text => text.includes('Squats')));
@@ -374,29 +414,29 @@ try {
     assert(exposedExercises.some(text => text.includes('Crunches')));
     assert(exposedExercises.some(text => text.includes('Jumping Jacks')));
 
-    // 4. Test exercise switching in preview
+    // 5. Test exercise switching in preview
     await evaluate('(() => { [...document.querySelectorAll(".preview-exercise-tab")].find(el => el.textContent.includes("Push-ups")).click(); })()');
     await ready(() => evaluate('document.body.innerText.includes("Elbow angle")'));
 
-    // 5. Switch back to squats
+    // 6. Switch back to squats
     await evaluate('(() => { [...document.querySelectorAll(".preview-exercise-tab")].find(el => el.textContent.includes("Squats")).click(); })()');
     await ready(() => evaluate('document.body.innerText.includes("Knee angle")'));
 
-    // 6. Test Back navigation from preview returns to Welcome without redirecting to profile
+    // 7. Test Back navigation from preview returns to Welcome without redirecting to profile
     await evaluate('document.querySelector(' + JSON.stringify('[aria-label="Back to previous screen"]') + ').click()');
     await route('');
     await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
 
-    // 7. Re-enter preview via Live Camera Coach hero CTA
+    // 8. Re-enter preview via Live Camera Coach hero CTA
     await click('Live Camera Coach');
     await route('preview');
 
-    // 8. Test Home button in preview topbar returns to Welcome
+    // 9. Test Home button in preview topbar returns to Welcome
     await evaluate('document.querySelector(' + JSON.stringify('[aria-label="Go to BITS in Motion homepage"]') + ').click()');
     await route('');
     await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
 
-    // 9. Direct URL hash navigation to #preview works anonymously
+    // 10. Direct URL hash navigation to #preview works anonymously
     await evaluate('location.hash = "#preview"');
     await route('preview');
     await ready(() => evaluate('Boolean(document.querySelector(".preview-mode-banner"))'));
@@ -404,7 +444,7 @@ try {
     await route('');
     await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
 
-    // 10. Assert absolutely no persistence occurred
+    // 11. Assert absolutely no persistence occurred
     assert.equal(await evaluate('localStorage.getItem("bits-motion-sessions-v1")'), null);
     assert.equal(await evaluate('localStorage.getItem("bits-motion-guest-active-v1")'), null);
     assert.equal(await evaluate('localStorage.getItem("bits-motion-profile-v1")'), null);
@@ -413,6 +453,11 @@ try {
 
   let guestPlan;
   await record('Guest onboarding supports browser Back/Forward, Home and draft restoration', async () => {
+    const guestPresent = await evaluate('[...document.querySelectorAll("button")].some(el => el.textContent.trim() === "Continue as Guest")');
+    if (!guestPresent) {
+      await click('Set up my fitness journey');
+    }
+    await ready(() => evaluate('[...document.querySelectorAll("button")].some(el => el.textContent.trim() === "Continue as Guest")'));
     await click('Continue as Guest');
     await route('profile');
     await setFields({ displayName: 'Draft Guest' });
@@ -462,7 +507,7 @@ try {
     assert.equal(await evaluate('JSON.parse(localStorage.getItem("bits-motion-sessions-v1") || "[]").length'), 0);
     await evaluate('document.querySelector(' + JSON.stringify('[aria-label="Go to BITS in Motion homepage"]') + ').click()');
     await ready(() => evaluate('Boolean(document.querySelector(".welcome-screen-v2"))'));
-    await click('Camera-guided movement');
+    await click('Live Camera Coach');
     await route('preview');
     await ready(() => evaluate('Boolean(document.querySelector(' + JSON.stringify('[aria-label="Go to BITS in Motion homepage"]') + '))'));
     await evaluate('document.querySelector(' + JSON.stringify('[aria-label="Go to BITS in Motion homepage"]') + ').click()');
@@ -614,6 +659,11 @@ try {
 
   await record('Guest history stays independent through A/B account switches', async () => {
     await logout();
+    const guestPresent = await evaluate('[...document.querySelectorAll("button")].some(el => el.textContent.trim() === "Continue as Guest")');
+    if (!guestPresent) {
+      await click('Set up my fitness journey');
+    }
+    await ready(() => evaluate('[...document.querySelectorAll("button")].some(el => el.textContent.trim() === "Continue as Guest")'));
     await click('Continue as Guest');
     await route('dashboard');
     assert((await body()).includes('Guest Example'));

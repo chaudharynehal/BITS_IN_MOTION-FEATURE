@@ -16,6 +16,8 @@ describe('application navigation', () => {
     expect(resolveRequestedScreen({ requested: 'features', activeAccount: false, profileComplete: false })).toBe('features');
     expect(resolveRequestedScreen({ requested: 'how-it-works', activeAccount: false, profileComplete: false })).toBe('how-it-works');
     expect(resolveRequestedScreen({ requested: 'terms', activeAccount: false, profileComplete: false })).toBe('terms');
+    expect(resolveRequestedScreen({ requested: 'privacy', activeAccount: false, profileComplete: false })).toBe('privacy');
+    expect(resolveRequestedScreen({ requested: 'health-disclaimer', activeAccount: false, profileComplete: false })).toBe('health-disclaimer');
     expect(resolveRequestedScreen({ requested: 'preview', activeAccount: false, profileComplete: false })).toBe('preview');
   });
 
@@ -30,6 +32,10 @@ describe('application navigation', () => {
     expect(screenFromHash('#features')).toBe('features');
     expect(screenFromHash('#/how-it-works')).toBe('how-it-works');
     expect(screenFromHash('#terms')).toBe('terms');
+    expect(screenFromHash('#privacy')).toBe('privacy');
+    expect(screenFromHash('#/privacy')).toBe('privacy');
+    expect(screenFromHash('#health-disclaimer')).toBe('health-disclaimer');
+    expect(screenFromHash('#/health-disclaimer')).toBe('health-disclaimer');
     expect(screenFromHash('#preview')).toBe('preview');
     expect(screenFromHash('#/preview')).toBe('preview');
     expect(screenFromHash('#unknown')).toBeNull();

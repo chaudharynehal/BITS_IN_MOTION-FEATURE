@@ -1,12 +1,12 @@
 # BITS in Motion — Current Project State
 
 ## Current Repository State
-- **Branch**: `feature/google-auth-user-database`
+- **Branch**: `feature/homepage-product-polish` (authoritative base: `feature/google-auth-user-database`)
 - **Current Live Repository HEAD**: Dynamic — inspect dynamically at session start using Git (`git rev-parse HEAD`). Git is authoritative for live HEAD.
-- **Last Application/Source Checkpoint**: `a52af438d76ab2792059f9ecd27125122917c5f9` (PR #2 merge commit) / `66d90c07b214745cf8d2a809238fe78e121d8777` (feature commit)
-- **Origin Synchronization**: `origin/feature/google-auth-user-database` tracks this branch.
+- **Last Application/Source Checkpoint**: `e73d807` (Homepage UX, CTA hierarchy & Trust refinement feature commit) / `a52af43` (PR #2 production merge commit)
+- **Origin Synchronization**: `origin/feature/homepage-product-polish`
 - **Branch Topology**: No local `main` branch exists; no remote `origin/main` branch exists.
-- **Working Tree State**: Clean. Homepage UX, Dedicated Pages, Anonymous Camera Preview, and `coachReturnScreen` bug fix are merged into `feature/google-auth-user-database` and live in production.
+- **Working Tree State**: Clean. Ready for push and pull request.
 - **Note on Commit Hashes**: Stored commit hashes in this document describe meaningful application/deployment checkpoints, not necessarily the latest documentation-only repository commit.
 
 ## Production State
@@ -59,13 +59,25 @@
 - **Other Open Issues**: None.
 
 ## Work In Progress
-- `None` — Homepage UX enhancements and Trust pages merged and live in production.
+- **Second-Pass Homepage UX, CTA Hierarchy & Trust Refinements**:
+  - **Duplicate Camera CTA Removed**: Removed redundant `.camera-guided-cta` button and styles; preserved solely `.camera-hero-btn` ("Live Camera Coach") as the prominent Anonymous Camera Coach Preview CTA (`#preview`).
+  - **Top Navigation Sign In**: Added a clean secondary `Sign in` button in top navigation for unauthenticated visitors.
+  - **On-Demand Auth Chooser**: Cleaned up the hero section by keeping the Google/Guest chooser unexpanded by default. Clicking `Set up my fitness journey` or `Sign in` expands the focused onboarding choice card with clear descriptions for Google Account (Cloud Sync) vs Guest Mode (Local Storage).
+  - **Returning User Continuity**: For users with active sessions (`signed-in`, `guest`, `demo`), primary button displays `Continue my journey` and resumes directly to dashboard/setup.
+  - **Three Distinct Trust & Safety Screens**:
+    - `Terms of Service` (`#terms`, `src/screens/TermsScreen.jsx`): 13 dedicated sections covering rules of use, user responsibilities, acceptable use, liability limitations, and hackathon prototype status.
+    - `Privacy Policy` (`#privacy`, `src/screens/PrivacyScreen.jsx`): 12 comprehensive sections covering on-device MediaPipe vision, zero video/frame upload architecture, ephemeral preview zero persistence, guest `localStorage`, Google OAuth 2.0, Neon PostgreSQL user isolation (`WHERE user_id = $1`), signed session cookies, opt-in leaderboard pseudonymous aliases, and honest regulatory disclosures (no false HIPAA/SOC2/GDPR claims).
+    - `Health & Safety Disclaimer` (`#health-disclaimer`, `src/screens/HealthDisclaimerScreen.jsx`): 9 practical sections covering non-medical status, physician consultation advisory, mandatory "listen to your body" protocol, 2m x 2m hostel/dorm room clearance, camera coach assistive limitations, low-impact exercise risk disclosures, footwear/hydration, and emergency services guidance.
+  - **Trust Sub-Navigation**: Added `.trust-subnav` pill bar allowing seamless one-click cross-navigation across Terms, Privacy, and Health Disclaimer screens, with returning buttons to Home/Dashboard.
+  - **Independent Footer Routing**: Fixed homepage footer Trust & Safety links to route independently to `'terms'`, `'privacy'`, and `'health-disclaimer'`.
+  - **Navigation Routing**: Added `'privacy'` and `'health-disclaimer'` to `APP_SCREENS` and `PUBLIC_SCREENS` in `src/utils/navigation.js`.
+  - **Browser Verification**: Updated `scripts/verify-browser.mjs` to assert duplicate CTA removal, Live Camera Coach preview launch, navigation sign-in button, on-demand auth chooser reveal, and full navigation/refresh/subnav across all 3 Trust screens.
 
 ## Pending External Contributions
 - **Tisha's Branch & PR #1 (`tisha-db`)**: PR #1 ("feat: add low-impact exercise personalization rules and catalog metadata") remains pending and untouched, awaiting dedicated review and reconciliation.
 
 ## Recommended Next Step
-- Safely review, reconcile, and integrate Tisha's personalization work from `origin/tisha-db` (PR #1) under a dedicated review flow.
+- Push `feature/homepage-product-polish` to origin, open Pull Request to merge into `feature/google-auth-user-database`, and verify Vercel preview deployment. Once merged, finalize production deployment.
 
 ## Multi-Agent Handoff Protocol
 This repository is developed cooperatively by multiple coding agents (**Codex**, **Gemini / Antigravity**, and **Claude Code**). To avoid regressions and conflicting assumptions:
