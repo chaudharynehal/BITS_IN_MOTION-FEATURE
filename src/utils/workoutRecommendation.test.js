@@ -5,7 +5,7 @@ import { PROFILE_OPTIONS } from '../../shared/profile.js';
 import { EXERCISES } from '../data/exercises.js';
 import { buildWorkoutSequence } from '../App.jsx';
 
-const base = { level: 'Beginner', goal: 'Stay fit', time: '20', location: 'Hostel room', equipment: 'None', lowImpact: false };
+const base = { level: 'Beginner', goal: 'Stay fit', time: '20', location: 'Hostel', equipment: 'None', lowImpact: false };
 const ids = (plan) => plan.exercises.map((item) => item.id);
 const signature = (plan) => plan.exercises.map(({ id, duration }) => [id, duration]);
 const cases = PROFILE_OPTIONS.level.flatMap((level) => PROFILE_OPTIONS.goal.flatMap((goal) =>
@@ -79,13 +79,19 @@ describe('recommendation eligibility and exact time budgets', () => {
     expect(plans[2].focus).toContain('Conditioning emphasis');
   });
 
-  it('uses existing location to exclude wide and travelling movements', () => {
-    const open = generateWorkoutPlan({ ...base, location: 'Campus', time: 45, level: 'Intermediate', goal: 'Support weight management' });
-    const small = generateWorkoutPlan({ ...base, time: 45, level: 'Intermediate', goal: 'Support weight management' });
-    expect(ids(open)).toContain('jumping-jacks');
-    expect(ids(open)).toContain('lunges');
-    expect(ids(small)).not.toContain('jumping-jacks');
-    expect(ids(small)).not.toContain('lunges');
+  it('keeps PG Room and Hostel compact while Home can use wider movements', () => {
+    const input = { ...base, time: 45, level: 'Intermediate', goal: 'Support weight management' };
+    const pg = generateWorkoutPlan({ ...input, location: 'PG Room' });
+    const hostel = generateWorkoutPlan({ ...input, location: 'Hostel' });
+    const home = generateWorkoutPlan({ ...input, location: 'Home' });
+    expect(ids(home)).toContain('jumping-jacks');
+    expect(ids(home)).toContain('lunges');
+    for (const compact of [pg, hostel]) {
+      expect(ids(compact)).not.toContain('jumping-jacks');
+      expect(ids(compact)).not.toContain('lunges');
+    }
+    expect(pg.reasons.join(' ')).toContain('PG Room');
+    expect(hostel.reasons.join(' ')).toContain('Hostel');
   });
 
   it.each([{}, { time: 'NaN' }, { time: -10 }, { time: Infinity }, { level: 'Advanced', equipment: 'unknown', location: 'unknown' }])('handles invalid legacy preferences %#', (profile) => {
@@ -99,10 +105,10 @@ describe('recommendation eligibility and exact time budgets', () => {
       .toEqual(generateWorkoutPlan({ level: 'Intermediate', time: 30, goal: 'Build strength', equipment: 'Backpack', location: 'Gym' }));
   });
 
-  it('explains unsupported legacy equipment and never promises its use', () => {
-    const plan = generateWorkoutPlan({ ...base, level: 'Intermediate', equipment: 'Dumbbells' });
+  it.each(['Dumbbell', 'Resistance Band', 'Dumbbells'])('explains unsupported %s equipment and never promises its use', (equipment) => {
+    const plan = generateWorkoutPlan({ ...base, level: 'Intermediate', equipment });
     expect(plan.exercises.every((item) => item.equipment === 'None')).toBe(true);
-    expect(plan.reasons.join(' ')).toContain('not supported yet');
+    expect(plan.reasons.join(' ')).toContain('not in the current catalogue yet');
   });
 
   it('fails closed if required catalogue entries are unavailable', () => {
@@ -111,10 +117,10 @@ describe('recommendation eligibility and exact time budgets', () => {
   });
 
   it('generates executable, non-absurd plans for Personas A through E', () => {
-    const personaA = generateWorkoutPlan({ level: 'Beginner', time: '10', location: 'Hostel room', goal: 'Support weight management', lowImpact: true, equipment: 'None' });
-    const personaB = generateWorkoutPlan({ level: 'Beginner', time: '30', location: 'Hostel room', goal: 'Stay fit', lowImpact: false, equipment: 'None' });
+    const personaA = generateWorkoutPlan({ level: 'Beginner', time: '10', location: 'PG Room', goal: 'Support weight management', lowImpact: true, equipment: 'None' });
+    const personaB = generateWorkoutPlan({ level: 'Beginner', time: '30', location: 'Hostel', goal: 'Stay fit', lowImpact: false, equipment: 'None' });
     const personaC = generateWorkoutPlan({ level: 'Intermediate', time: '30', location: 'Open indoor space', goal: 'Build strength', lowImpact: false, equipment: 'Backpack' });
-    const personaD = generateWorkoutPlan({ level: 'Intermediate', time: '45', location: 'Hostel room', goal: 'Support weight management', lowImpact: false, equipment: 'None' });
+    const personaD = generateWorkoutPlan({ level: 'Intermediate', time: '45', location: 'Hostel', goal: 'Support weight management', lowImpact: false, equipment: 'None' });
     const personaE = generateWorkoutPlan({ level: 'Intermediate', time: '20', location: 'Home', goal: 'Stay fit', lowImpact: true, equipment: 'Backpack' });
 
     // Duration and volume differentiations

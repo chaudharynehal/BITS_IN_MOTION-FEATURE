@@ -6,6 +6,9 @@ export function createCycleCounter(overrides = {}) {
     stableFrames: 4,
     stableDurationMs: 120,
     minRepIntervalMs: 700,
+    minCycleDurationMs: 350,
+    maxCycleDurationMs: 8000,
+    lostResetMs: 1200,
     ...overrides,
   };
   let phase = 'finding-start';
@@ -15,6 +18,8 @@ export function createCycleCounter(overrides = {}) {
   let candidateSince = 0;
   let lastRepAt = -Infinity;
   let reachedTarget = false;
+  let targetReachedAt = null;
+  let missingSince = null;
 
   function clearCandidate() {
     candidate = null;
@@ -24,9 +29,16 @@ export function createCycleCounter(overrides = {}) {
 
   function update({ classification, visibility = 1, timestamp = performance.now() }) {
     if (!classification || classification === 'invalid' || visibility < config.minVisibility) {
+      if (missingSince === null) missingSince = timestamp;
       clearCandidate();
+      if (timestamp - missingSince >= config.lostResetMs) {
+        phase = 'finding-start';
+        reachedTarget = false;
+        targetReachedAt = null;
+      }
       return { reps, phase, event: 'invalid', classification: 'invalid' };
     }
+    missingSince = null;
     if (classification === 'transition') {
       clearCandidate();
       return { reps, phase: phase === config.targetState ? 'returning' : 'moving', event: null, classification };
@@ -54,11 +66,16 @@ export function createCycleCounter(overrides = {}) {
     } else if (classification === config.targetState && phase === config.startState) {
       phase = config.targetState;
       reachedTarget = true;
+      targetReachedAt = timestamp;
       event = 'target';
     } else if (classification === config.startState && phase === config.targetState && reachedTarget) {
       phase = config.startState;
       reachedTarget = false;
-      if (timestamp - lastRepAt >= config.minRepIntervalMs) {
+      const cycleDuration = targetReachedAt === null ? 0 : timestamp - targetReachedAt;
+      targetReachedAt = null;
+      if (cycleDuration >= config.minCycleDurationMs
+        && cycleDuration <= config.maxCycleDurationMs
+        && timestamp - lastRepAt >= config.minRepIntervalMs) {
         reps += 1;
         lastRepAt = timestamp;
         event = 'rep';
@@ -73,6 +90,8 @@ export function createCycleCounter(overrides = {}) {
     reps = 0;
     lastRepAt = -Infinity;
     reachedTarget = false;
+    targetReachedAt = null;
+    missingSince = null;
     clearCandidate();
     return snapshot();
   }

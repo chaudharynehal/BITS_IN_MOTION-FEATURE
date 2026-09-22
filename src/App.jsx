@@ -62,7 +62,7 @@ const JUDGE_PROFILE = {
   level: 'Beginner',
   goal: 'Stay fit',
   time: '20',
-  location: 'Hostel room',
+  location: 'Hostel',
   equipment: 'None',
   lowImpact: false,
   leaderboardOptIn: false,
