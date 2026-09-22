@@ -21,6 +21,7 @@ import {
   Zap,
 } from 'lucide-react';
 import ScreenHeader from '../components/ScreenHeader';
+import PublicInfoNav from '../components/PublicInfoNav';
 
 export default function FeaturesScreen({ onNavigate, onStartCoach, appActive, hasProfile }) {
   return (
@@ -48,6 +49,8 @@ export default function FeaturesScreen({ onNavigate, onStartCoach, appActive, ha
           </div>
         }
       />
+
+      <PublicInfoNav current="features" onNavigate={onNavigate} />
 
       <div className="features-grid">
         {/* 1. Camera Coach */}

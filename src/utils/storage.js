@@ -145,8 +145,11 @@ export function createJudgeDemoHistory() {
   ];
 }
 
-export function getProgressSummary(sessions) {
-  const totals = sessions.reduce(
+export function getProgressSummary(sessions, serverSummary = null) {
+  const totals = serverSummary ? {
+    workouts: serverSummary.workouts ?? serverSummary.totalSessions ?? 0,
+    reps: serverSummary.totalReps ?? serverSummary.reps ?? 0,
+  } : sessions.reduce(
     (accumulator, session) => ({
       workouts: accumulator.workouts + 1,
       reps: accumulator.reps + (Number(session.reps) || 0),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { historyDepth, resolveRequestedScreen, screenFromHash } from './navigation';
+import { historyDepth, PUBLIC_SCREENS, resolveRequestedScreen, screenFromHash } from './navigation';
 
 describe('application navigation', () => {
   it('keeps the public homepage reachable for an incomplete active account', () => {
@@ -19,6 +19,7 @@ describe('application navigation', () => {
     expect(resolveRequestedScreen({ requested: 'privacy', activeAccount: false, profileComplete: false })).toBe('privacy');
     expect(resolveRequestedScreen({ requested: 'health-disclaimer', activeAccount: false, profileComplete: false })).toBe('health-disclaimer');
     expect(resolveRequestedScreen({ requested: 'preview', activeAccount: false, profileComplete: false })).toBe('preview');
+    expect([...PUBLIC_SCREENS]).toEqual(expect.arrayContaining(['terms', 'privacy', 'health-disclaimer']));
   });
 
   it('allows a completed account to open normal app screens', () => {
@@ -38,6 +39,7 @@ describe('application navigation', () => {
     expect(screenFromHash('#/health-disclaimer')).toBe('health-disclaimer');
     expect(screenFromHash('#preview')).toBe('preview');
     expect(screenFromHash('#/preview')).toBe('preview');
+    expect(screenFromHash('#self-guided')).toBe('self-guided');
     expect(screenFromHash('#unknown')).toBeNull();
   });
 

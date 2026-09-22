@@ -10,6 +10,7 @@ import {
   Lightbulb,
   LoaderCircle,
   MapPin,
+  Play,
   RefreshCw,
   Sparkles,
   Target,
@@ -52,17 +53,18 @@ export default function DashboardScreen({
   plan,
   planState,
   sessions,
+  sessionSummary = null,
   progressState,
   onRetryProgress,
   onRetryPlan,
   persistenceMode,
   onNavigate,
   onStartCoach,
+  onStartWorkout,
   onCreatePlan,
 }) {
-  const summary = getProgressSummary(sessions);
+  const summary = getProgressSummary(sessions, sessionSummary);
   const activity = weeklyActivity(sessions);
-  const { nextExercise: firstCameraExercise } = planActivity(plan, sessions);
   const recent = sessions[0];
 
   return (
@@ -90,16 +92,18 @@ export default function DashboardScreen({
                 <button className="button button-primary" disabled><LoaderCircle className="spin" size={18} /> Loading plan…</button>
               ) : planState === 'error' ? (
                 <button className="button button-primary" onClick={onRetryPlan}><RefreshCw size={18} /> Retry plan</button>
-              ) : firstCameraExercise ? (
-                <button className="button button-primary" onClick={() => onStartCoach(firstCameraExercise.id, 'dashboard')}>
-                  <Camera size={18} /> Practice {shortExerciseName(firstCameraExercise)}
-                </button>
               ) : plan ? (
-                <button className="button button-primary" onClick={() => onNavigate('plan')}>Follow my plan <ArrowRight size={17} /></button>
+                <>
+                  <button className="button button-primary" onClick={() => onStartWorkout ? onStartWorkout(plan) : onNavigate('plan')}>
+                    <Play size={18} /> Start workout ({plan.totalMinutes} min)
+                  </button>
+                  <button className="button button-on-dark" onClick={() => onNavigate('plan')}>
+                    View plan <ArrowRight size={17} />
+                  </button>
+                </>
               ) : (
                 <button className="button button-primary" onClick={onCreatePlan}><Sparkles size={18} /> Create my plan</button>
               )}
-              {firstCameraExercise && <button className="button button-on-dark" onClick={() => onNavigate('plan')}>View my plan <ArrowRight size={17} /></button>}
             </div>
           </div>
           <div className="dashboard-pose" aria-hidden="true">
@@ -132,7 +136,7 @@ export default function DashboardScreen({
             <span><strong>{summary.workouts}</strong> saved sessions</span>
             <span><strong>{summary.reps}</strong> tracked reps</span>
             <span><strong>{summary.streak}</strong> day streak</span>
-          </div><p className="field-help">Chart: last 7 days. Totals use {persistenceMode === 'account' ? 'your latest 50 account sessions' : 'your saved sessions'}.</p></>}
+          </div><p className="field-help">Chart: last 7 days. Totals use {persistenceMode === 'account' ? 'your account history' : 'your saved sessions'}.</p></>}
         </article>
 
         <article className="dashboard-plan panel">
@@ -161,7 +165,6 @@ export default function DashboardScreen({
           <span className="eyebrow">Quick start</span>
           <h2>Move your way</h2>
           <button onClick={() => onNavigate('workouts')}><Dumbbell size={20} /><span><strong>Explore workouts</strong><small>See every supported movement</small></span><ChevronRight size={18} /></button>
-          <button onClick={() => onStartCoach('squats', 'dashboard')}><Camera size={20} /><span><strong>Open camera coach</strong><small>Start directly with squats</small></span><ChevronRight size={18} /></button>
           <button onClick={() => onNavigate('leaderboard')}><Trophy size={20} /><span><strong>Leaderboard</strong><small>Consistency, with privacy</small></span><ChevronRight size={18} /></button>
         </article>
 
@@ -173,11 +176,11 @@ export default function DashboardScreen({
           {progressState === 'loading' ? <p>Checking your saved sessions…</p> : progressState === 'error' ? <p>Retry your progress to see your latest workout.</p> : recent ? (
             <div className="recent-session">
               <span><Clock3 size={17} /> {Math.max(1, Math.round(recent.durationSeconds / 60))} minutes</span>
-              <span><Dumbbell size={17} /> {recent.reps} reps</span>
+              <span><Dumbbell size={17} /> {recent.source === 'self-guided' ? 'Self-guided' : `${recent.reps} reps`}</span>
               <span><Flame size={17} /> {Number(recent.calories || 0).toFixed(1)} kcal estimate</span>
             </div>
           ) : (
-            <p>Finish your first camera-coach session when you’re ready. Your history will appear here.</p>
+            <p>Finish your first workout session when you’re ready. Your history will appear here.</p>
           )}
           <button className="text-button" onClick={() => onNavigate('progress')}>View progress <ArrowRight size={16} /></button>
         </article>

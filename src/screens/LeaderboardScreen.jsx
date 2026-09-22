@@ -55,7 +55,7 @@ export default function LeaderboardScreen({ user, accountSyncAvailable, onHome }
       <section className="leaderboard-hero panel-dark" aria-live="polite">
         <div>
           <span className="eyebrow light">{status === 'sample' ? 'Illustrative community activity' : period === 'week' ? 'Last 7 days' : 'All time'}</span>
-          {status === 'loading' ? <><h2>Loading community activity…</h2><p>Getting the latest opt-in rankings.</p></> : status === 'error' ? <><h2>Rankings are unavailable right now</h2><p>Your personal workout history is unchanged.</p></> : <><h2>{community.active_people || 0} students kept moving</h2><p>{community.workouts || 0} workouts and {community.reps || 0} camera-tracked repetitions.</p></>}
+          {status === 'loading' ? <><h2>Loading community activity…</h2><p>Getting the latest opt-in rankings.</p></> : status === 'error' ? <><h2>Rankings are unavailable right now</h2><p>Your personal workout history is unchanged.</p></> : <><h2>{community.active_people || 0} students kept moving</h2><p>{community.sessions ?? community.workouts ?? 0} logged sessions and {community.reps || 0} camera-tracked repetitions.</p></>}
         </div>
         <Users size={50} />
       </section>
@@ -69,7 +69,7 @@ export default function LeaderboardScreen({ user, accountSyncAvailable, onHome }
       </div>
 
       <section className="leaderboard-panel panel" aria-label="Workout leaderboard" aria-busy={status === 'loading'}>
-        <div className="leaderboard-columns"><span>Rank & student</span><span>Active days</span><span>Workouts</span><span>Reps</span></div>
+        <div className="leaderboard-columns"><span>Rank & student</span><span>Active days</span><span>Sessions</span><span>Reps</span></div>
         {status === 'loading' ? (
           <div className="leaderboard-loading" role="status"><LoaderCircle className="spin" size={24} /> Loading community activity…</div>
         ) : status === 'error' ? (
@@ -82,7 +82,7 @@ export default function LeaderboardScreen({ user, accountSyncAvailable, onHome }
               <strong>{leader.name}{leader.isCurrentUser && <small>You</small>}</strong>
             </div>
             <span data-label="Active days">{leader.activeDays}</span>
-            <span data-label="Workouts">{leader.workouts}</span>
+            <span data-label="Sessions">{leader.sessions ?? leader.workouts}</span>
             <span data-label="Reps">{leader.reps}</span>
           </article>
         )) : <div className="leaderboard-empty"><Trophy size={27} /><h3>{period === 'week' ? 'This week’s ranking starts here' : 'The first ranking starts here'}</h3><p>Opt in from Profile and complete a session when you’re ready.</p></div>}

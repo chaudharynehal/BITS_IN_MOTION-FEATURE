@@ -11,7 +11,7 @@ const ICONS = {
   zap: Zap,
 };
 
-export default function ExerciseCard({ exercise, index, onStartCoach }) {
+export default function ExerciseCard({ exercise, index, onStartCoach, onStartSelfGuided }) {
   const Icon = ICONS[exercise.icon] || Activity;
   return (
     <article className={`exercise-card ${exercise.cameraSupported ? 'exercise-card-featured' : ''}`}>
@@ -22,9 +22,11 @@ export default function ExerciseCard({ exercise, index, onStartCoach }) {
         <h3>{exercise.name}</h3>
         <p>{exercise.instruction}</p>
       </div>
-      {exercise.cameraSupported && (
+      {exercise.cameraSupported ? (
         <button className="button button-camera" onClick={() => onStartCoach(exercise.id)}><ScanLine size={18} /> Start camera coach</button>
-      )}
+      ) : onStartSelfGuided ? (
+        <button className="button button-camera button-self-guided" onClick={() => onStartSelfGuided(exercise.id)}><Timer size={18} /> Start self-guided</button>
+      ) : null}
     </article>
   );
 }

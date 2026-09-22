@@ -21,6 +21,7 @@ import {
   Users,
 } from 'lucide-react';
 import ScreenHeader from '../components/ScreenHeader';
+import PublicInfoNav from '../components/PublicInfoNav';
 
 const JOURNEY_STEPS = [
   {
@@ -137,6 +138,8 @@ export default function HowItWorksScreen({ onNavigate, onStartCoach, appActive, 
           </div>
         }
       />
+
+      <PublicInfoNav current="how-it-works" onNavigate={onNavigate} />
 
       {/* 7-Step Journey Timeline */}
       <div className="journey-timeline">

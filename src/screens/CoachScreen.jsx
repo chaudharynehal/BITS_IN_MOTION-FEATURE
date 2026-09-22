@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Camera, CheckCircle2, CircleStop, Info, LoaderCircle, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, TriangleAlert, VideoOff } from 'lucide-react';
+import { ArrowLeft, Camera, Check, CheckCircle2, CircleStop, Info, LoaderCircle, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, TriangleAlert, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { getCameraErrorState, isCameraSupported, startCamera, stopCamera } from '../vision/camera';
 import { clearPoseOverlay, drawPoseOverlay, initializePoseLandmarker } from '../vision/poseLandmarker';
 import { createExerciseDetector, DETECTOR_CONFIGS } from '../vision/exerciseDetectors';
@@ -15,9 +15,11 @@ const CAMERA_EXERCISES = [
 
 export default function CoachScreen({
   exerciseId = 'squats',
+  activeWorkout = null,
   onBack,
   onHome,
   onEndSession,
+  onSkip,
   previewMode = false,
   onSelectExercise,
 }) {
@@ -52,6 +54,10 @@ export default function CoachScreen({
   const [feedback, setFeedback] = useState(INITIAL_FEEDBACK);
   const [videoAspect, setVideoAspect] = useState(4 / 3);
   const [previewSummary, setPreviewSummary] = useState(null);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const lastSpokenCueRef = useRef('');
+  const lastSpokenTimeRef = useRef(0);
+  const lastSpokenRepRef = useRef(0);
 
   useEffect(() => {
     if (previewSummary) summaryRef.current?.showModal();
@@ -69,7 +75,21 @@ export default function CoachScreen({
       lastCueKeyRef.current = cue.key;
     }
     if (mountedRef.current) setFeedback(next);
-  }, []);
+
+    if (voiceEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window && cue.message) {
+      if (cue.message !== lastSpokenCueRef.current && (now - lastSpokenTimeRef.current > 3500)) {
+        lastSpokenCueRef.current = cue.message;
+        lastSpokenTimeRef.current = now;
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(cue.message);
+          utterance.rate = 1.05;
+          utterance.pitch = 1.0;
+          window.speechSynthesis.speak(utterance);
+        } catch {}
+      }
+    }
+  }, [voiceEnabled]);
 
   useEffect(() => {
     stopSessionCamera();
@@ -80,6 +100,7 @@ export default function CoachScreen({
     cueCountsRef.current = {};
     lastCueKeyRef.current = null;
     lastMeasurementRef.current = null;
+    lastSpokenRepRef.current = 0;
     feedbackRef.current = INITIAL_FEEDBACK;
     setReps(0);
     setStage('Finding start');
@@ -127,6 +148,9 @@ export default function CoachScreen({
       streamRef.current = null;
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch {}
+      }
     };
   }, [loadModel]);
 
@@ -150,6 +174,18 @@ export default function CoachScreen({
         drawPoseOverlay(canvas, landmarks);
         const state = detectorRef.current.update(landmarks, performance.now());
         const measurement = state.measurement;
+
+        if (state.reps > lastSpokenRepRef.current) {
+          lastSpokenRepRef.current = state.reps;
+          if (voiceEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            try {
+              window.speechSynthesis.cancel();
+              const repUtterance = new SpeechSynthesisUtterance(`Rep ${state.reps}`);
+              repUtterance.rate = 1.1;
+              window.speechSynthesis.speak(repUtterance);
+            } catch {}
+          }
+        }
 
         setReps(state.reps);
         setStage(state.phaseLabel);
@@ -217,6 +253,9 @@ export default function CoachScreen({
     streamRef.current = null;
     clearPoseOverlay(canvasRef.current);
     setCameraStatus('idle');
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
   }
 
   function handleReset() {
@@ -273,6 +312,11 @@ export default function CoachScreen({
     });
   }
 
+  function handleSkip() {
+    stopSessionCamera();
+    onSkip?.();
+  }
+
   function handleBack() {
     stopSessionCamera();
     onBack();
@@ -285,6 +329,7 @@ export default function CoachScreen({
 
   const canStart = modelStatus === 'ready' && ['idle', 'denied', 'unsupported', 'error'].includes(cameraStatus);
   const isRunning = cameraStatus === 'running';
+  const isFloorExercise = exerciseId === 'pushups' || exerciseId === 'crunches';
 
   function dismissSummary() {
     summaryRef.current?.close();
@@ -308,10 +353,30 @@ export default function CoachScreen({
           <button className="coach-home-button" type="button" onClick={handleHome} aria-label="Go to BITS in Motion homepage"><img src="/logo.png" alt="" /><span>Home</span></button>
         </div>
         <div>
-          <span className="eyebrow light">{previewMode ? 'Camera Coach Preview' : `Live ${detectorConfig.name}`}</span>
-          <small>{previewMode ? detectorConfig.name : 'Basic observable pose feedback'}</small>
+          <span className="eyebrow light">
+            {activeWorkout ? `Workout · Movement ${activeWorkout.currentIndex + 1} of ${activeWorkout.exercises.length}` : previewMode ? 'Camera Coach Preview' : `Live ${detectorConfig.name}`}
+          </span>
+          <small>{activeWorkout ? activeWorkout.planTitle : previewMode ? detectorConfig.name : 'Basic observable pose feedback'}</small>
         </div>
-        <button className="coach-reset" onClick={handleReset} disabled={!isRunning}><RotateCcw size={17} /> Reset</button>
+        <div className="coach-topbar-actions">
+          <button
+            className={'coach-audio-toggle ' + (voiceEnabled ? 'active' : '')}
+            onClick={() => {
+              const next = !voiceEnabled;
+              setVoiceEnabled(next);
+              if (!next && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+              }
+            }}
+            type="button"
+            aria-label={voiceEnabled ? 'Mute voice cues' : 'Enable audio voice cues'}
+            title={voiceEnabled ? 'Voice cues active' : 'Voice cues muted'}
+          >
+            {voiceEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            <span>{voiceEnabled ? 'Voice on' : 'Voice off'}</span>
+          </button>
+          <button className="coach-reset" onClick={handleReset} disabled={!isRunning}><RotateCcw size={17} /> Reset</button>
+        </div>
       </div>
 
       {previewMode && (
@@ -338,6 +403,16 @@ export default function CoachScreen({
 
       <div className="coach-layout">
         <section className="camera-panel">
+          {isFloorExercise && (
+            <aside className="floor-placement-banner" role="note">
+              <Info size={18} />
+              <div>
+                <strong>Floor setup tip</strong>
+                <span>Place your device low (1–2 ft off ground or tilted down) about 6–8 ft away, with a side-on view so your entire body from head to feet is visible on the floor.</span>
+              </div>
+            </aside>
+          )}
+
           <div className="camera-viewport" style={{ aspectRatio: videoAspect }}>
             <video ref={videoRef} playsInline muted aria-label="Live camera preview" />
             <canvas ref={canvasRef} aria-label="Pose landmark overlay" />
@@ -351,7 +426,18 @@ export default function CoachScreen({
               </div>
             )}
 
-            {isRunning && <div className="live-badge"><span /> Live · processed locally</div>}
+            {isRunning && (
+              <>
+                <div className="live-badge"><span /> Live · processed locally</div>
+                <div className={`coach-ready-indicator ${measurementValue !== null ? 'ready' : 'waiting'}`}>
+                  {measurementValue !== null ? (
+                    <><Check size={14} /> Full body in frame · Ready</>
+                  ) : (
+                    <><Info size={14} /> Step full body into camera view</>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <div className={`coach-feedback ${feedback.tone}`} aria-live="polite">
@@ -370,6 +456,7 @@ export default function CoachScreen({
           <div className="local-processing"><ShieldCheck size={20} /><p><strong>No camera recording.</strong> Frames are processed in the browser and discarded immediately.</p></div>
           <div className="coach-disclaimer"><Info size={16} /> This prototype gives basic visible pose cues, not medical or trainer-level assessment.</div>
           <button className="button button-danger" onClick={handleEnd} disabled={!isRunning}><CircleStop size={18} /> End session</button>
+          {activeWorkout && <button className="button button-quiet" type="button" onClick={handleSkip}>Skip this movement</button>}
         </aside>
       </div>
 

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { generateWorkoutPlan } from './workoutRecommendation';
-import { recommendWorkout, normalizePreferences, isEligible } from '../../shared/recommendation.js';
+import { recommendWorkout, normalizePreferences, isEligible, calculateWorkoutDuration } from '../../shared/recommendation.js';
 import { PROFILE_OPTIONS } from '../../shared/profile.js';
 import { EXERCISES } from '../data/exercises.js';
+import { buildWorkoutSequence } from '../App.jsx';
 
 const base = { level: 'Beginner', goal: 'Stay fit', time: '20', location: 'Hostel room', equipment: 'None', lowImpact: false };
 const ids = (plan) => plan.exercises.map((item) => item.id);
@@ -17,12 +18,14 @@ describe('recommendation eligibility and exact time budgets', () => {
     const p = normalizePreferences(profile);
     expect(plan.exercises[0].id).toBe('warmup');
     expect(plan.exercises.at(-1).id).toBe('cooldown');
-    expect(plan.exercises.reduce((sum, item) => sum + item.estimatedSeconds, 0)).toBe(Number(profile.time) * 60);
+    expect(calculateWorkoutDuration(plan)).toBe(Number(profile.time) * 60);
+    expect(plan.totalMinutes).toBe(Number(profile.time));
     expect(new Set(ids(plan)).size).toBe(plan.exercises.length);
     for (const item of plan.exercises) {
       expect(isEligible(item, p)).toBe(true);
       if (item.sets) {
         expect(item.sets * (item.workSeconds + item.restSeconds)).toBe(item.estimatedSeconds);
+        expect(item.rounds * item.setsPerRound * (item.workSeconds + item.restSeconds)).toBe(item.estimatedSeconds);
         expect(item.goalTags).toContain(p.goal);
       }
     }
@@ -73,7 +76,7 @@ describe('recommendation eligibility and exact time budgets', () => {
     expect(new Set(plans.map((plan) => JSON.stringify(signature(plan)))).size).toBe(3);
     expect(ids(plans[1])).not.toContain('jumping-jacks');
     expect(plans[2].exercises[1].id).toBe('jumping-jacks');
-    expect(plans[2].exercises[1].estimatedSeconds).toBeGreaterThan(plans[2].exercises.find((item) => item.id === 'plank').estimatedSeconds);
+    expect(plans[2].focus).toContain('Conditioning emphasis');
   });
 
   it('uses existing location to exclude wide and travelling movements', () => {
@@ -105,5 +108,104 @@ describe('recommendation eligibility and exact time budgets', () => {
   it('fails closed if required catalogue entries are unavailable', () => {
     expect(() => recommendWorkout(base, [])).toThrow('suitable workout');
     expect(() => recommendWorkout(base, Object.values(EXERCISES).filter((item) => item.id !== 'warmup'))).toThrow('suitable workout');
+  });
+
+  it('generates executable, non-absurd plans for Personas A through E', () => {
+    const personaA = generateWorkoutPlan({ level: 'Beginner', time: '10', location: 'Hostel room', goal: 'Support weight management', lowImpact: true, equipment: 'None' });
+    const personaB = generateWorkoutPlan({ level: 'Beginner', time: '30', location: 'Hostel room', goal: 'Stay fit', lowImpact: false, equipment: 'None' });
+    const personaC = generateWorkoutPlan({ level: 'Intermediate', time: '30', location: 'Open indoor space', goal: 'Build strength', lowImpact: false, equipment: 'Backpack' });
+    const personaD = generateWorkoutPlan({ level: 'Intermediate', time: '45', location: 'Hostel room', goal: 'Support weight management', lowImpact: false, equipment: 'None' });
+    const personaE = generateWorkoutPlan({ level: 'Intermediate', time: '20', location: 'Home', goal: 'Stay fit', lowImpact: true, equipment: 'Backpack' });
+
+    // Duration and volume differentiations
+    expect(personaA.totalMinutes).toBe(10);
+    expect(personaB.totalMinutes).toBe(30);
+    expect(personaC.totalMinutes).toBe(30);
+    expect(personaD.totalMinutes).toBe(45);
+    expect(personaE.totalMinutes).toBe(20);
+
+    // Safeguard: no single movement ever gets > 9 sets/minutes (prevents the 22-set marching disaster)
+    for (const plan of [personaA, personaB, personaC, personaD, personaE]) {
+      for (const exercise of plan.exercises) {
+        if (exercise.sets) {
+          expect(exercise.sets).toBeLessThanOrEqual(9);
+        }
+      }
+    }
+
+    // Persona A: Low impact respected, marching present, no jumping jacks
+    expect(ids(personaA)).toContain('marching');
+    expect(ids(personaA)).not.toContain('jumping-jacks');
+
+    // Persona B: Small room replaces jumping jacks with marching and explains it
+    expect(ids(personaB)).toContain('marching');
+    expect(personaB.reasons.some((r) => r.includes('Jumping jacks replaced'))).toBe(true);
+
+    // Persona C: Backpack rows and reverse lunges included
+    expect(ids(personaC)).toContain('rows');
+    expect(ids(personaC)).toContain('lunges');
+    expect(personaC.reasons).toContain('uses Backpack');
+
+    // Persona D: 45m weight management is balanced across movements, marching <= 9 min (not 22 min)
+    const marchingD = personaD.exercises.find((e) => e.id === 'marching');
+    expect(marchingD.sets).toBeLessThanOrEqual(9);
+    expect(ids(personaD)).toContain('pushups');
+    expect(ids(personaD)).toContain('crunches');
+
+    // Persona E: Intermediate 20m uses backpack rows and low impact
+    expect(ids(personaE)).toContain('rows');
+    expect(ids(personaE).every((id) => id !== 'jumping-jacks')).toBe(true);
+  });
+
+  it('independently computes actual executable duration for 10, 20, 30, 45, and 60 minutes with 0 discrepancy', () => {
+    for (const time of [10, 20, 30, 45, 60]) {
+      const plan = generateWorkoutPlan({ ...base, time });
+      const sequence = buildWorkoutSequence(plan);
+      const warmup = sequence.find((s) => s.id === 'warmup');
+      const cooldown = sequence.find((s) => s.id === 'cooldown');
+      const stations = sequence.filter((s) => !['warmup', 'cooldown'].includes(s.id));
+      const rounds = plan.rounds || 1;
+      const roundRecoveries = (rounds > 1 ? rounds - 1 : 0) * (plan.roundBreakSeconds || 60);
+      const actualExecutableSeconds = warmup.estimatedSeconds + stations.reduce((sum, s) => sum + s.estimatedSeconds, 0) + roundRecoveries + cooldown.estimatedSeconds;
+      expect(actualExecutableSeconds).toBe(time * 60);
+      expect(Math.abs(actualExecutableSeconds - time * 60)).toBe(0);
+      expect(calculateWorkoutDuration(plan)).toBe(time * 60);
+    }
+  });
+
+  it('guarantees circuit rotation and structure without monolithic blocks for 30, 45, and 60 min plans', () => {
+    for (const time of [30, 45, 60]) {
+      const plan = generateWorkoutPlan({ ...base, time });
+      const sequence = buildWorkoutSequence(plan);
+      expect(sequence[0].id).toBe('warmup');
+      expect(sequence.at(-1).id).toBe('cooldown');
+      expect(sequence.filter((s) => s.id === 'warmup')).toHaveLength(1);
+      expect(sequence.filter((s) => s.id === 'cooldown')).toHaveLength(1);
+
+      const stationSteps = sequence.filter((s) => !['warmup', 'cooldown'].includes(s.id));
+      expect(stationSteps).toHaveLength(plan.circuitStations * plan.rounds);
+
+      // Verify rotation: no consecutive steps have the same movement id
+      for (let i = 0; i < stationSteps.length - 1; i += 1) {
+        expect(stationSteps[i].id).not.toBe(stationSteps[i + 1].id);
+      }
+
+      // Verify each round visits each station once
+      for (let r = 1; r <= plan.rounds; r += 1) {
+        const roundSteps = stationSteps.filter((s) => s.round === r);
+        expect(roundSteps).toHaveLength(plan.circuitStations);
+        const uniqueIds = new Set(roundSteps.map((s) => s.id));
+        expect(uniqueIds.size).toBe(plan.circuitStations);
+      }
+
+      // Verify every station in plan has execution count matching displayed prescription
+      for (const exercise of plan.exercises.filter((e) => !['warmup', 'cooldown'].includes(e.id))) {
+        const executions = stationSteps.filter((s) => s.id === exercise.id);
+        expect(executions).toHaveLength(exercise.rounds);
+        expect(exercise.sets).toBe(exercise.rounds);
+        expect(exercise.setsPerRound).toBe(1);
+        expect(exercise.rounds * exercise.setsPerRound * (exercise.workSeconds + exercise.restSeconds)).toBe(exercise.estimatedSeconds);
+      }
+    }
   });
 });

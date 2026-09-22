@@ -5,7 +5,7 @@ import { MOVEMENT_SPACE } from '../../shared/recommendation';
 
 const LIBRARY = Object.values(EXERCISES);
 
-export default function WorkoutLibraryScreen({ onStartCoach, onNavigate }) {
+export default function WorkoutLibraryScreen({ onStartCoach, onStartSelfGuided, onNavigate }) {
   const [filter, setFilter] = useState('all');
   const exercises = filter === 'camera' ? LIBRARY.filter((exercise) => exercise.cameraSupported) : LIBRARY;
 
@@ -43,6 +43,8 @@ export default function WorkoutLibraryScreen({ onStartCoach, onNavigate }) {
             <p className="field-help">{exercise.primaryMuscles.join(' · ')}</p>
             {exercise.cameraSupported ? (
               <button className="button button-primary" onClick={() => onStartCoach(exercise.id, 'workouts')}><ScanLine size={17} /> Start camera coach</button>
+            ) : onStartSelfGuided ? (
+              <button className="button button-secondary" onClick={() => onStartSelfGuided(exercise.id, 'workouts')}><Dumbbell size={17} /> Start self-guided</button>
             ) : (
               <span className="field-help">Self-guided movement · written cues only</span>
             )}

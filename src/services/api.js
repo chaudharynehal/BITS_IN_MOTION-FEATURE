@@ -42,7 +42,8 @@ export const api = {
   saveProfile: (profile) => request('profile', { method: 'PUT', body: profile }),
   generatePlan: () => request('plan', { method: 'POST' }),
   latestPlan: () => request('plan'),
-  sessions: () => request('sessions'),
+  sessions: (query) => request('sessions', { query }),
+  sessionsSummary: () => request('sessions-summary'),
   saveSession: (session) => request('sessions', { method: 'POST', body: session }),
   leaderboard: (period = 'week') => request('leaderboard', { query: { period } }),
 };
