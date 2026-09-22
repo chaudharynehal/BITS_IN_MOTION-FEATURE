@@ -10,6 +10,11 @@ import ProgressScreen from './screens/ProgressScreen';
 import ResultScreen from './screens/ResultScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
 import WorkoutLibraryScreen from './screens/WorkoutLibraryScreen';
+import FeaturesScreen from './screens/FeaturesScreen';
+import HowItWorksScreen from './screens/HowItWorksScreen';
+import TermsScreen from './screens/TermsScreen';
+import PrivacyScreen from './screens/PrivacyScreen';
+import HealthDisclaimerScreen from './screens/HealthDisclaimerScreen';
 import { api } from './services/api';
 import { estimateCalories, getExerciseMet } from './utils/calories';
 import {
@@ -25,7 +30,7 @@ import {
 } from './utils/storage';
 import { buildWorkoutImpact } from './utils/workoutImpact';
 import { generateWorkoutPlan } from './utils/workoutRecommendation';
-import { APP_SCREENS, historyDepth, resolveRequestedScreen, screenFromHash } from './utils/navigation';
+import { APP_SCREENS, PUBLIC_SCREENS, historyDepth, resolveRequestedScreen, screenFromHash } from './utils/navigation';
 
 const CoachScreen = lazy(() => import('./screens/CoachScreen'));
 
@@ -378,12 +383,8 @@ export default function App() {
 
   const navigate = useCallback((nextScreen) => {
     const activeAccount = ['signed-in', 'guest', 'demo'].includes(auth.status);
-    if (nextScreen === 'welcome') {
-      routeTo('welcome');
-      return;
-    }
-    if (nextScreen === 'leaderboard') {
-      routeTo('leaderboard');
+    if (PUBLIC_SCREENS.has(nextScreen)) {
+      routeTo(nextScreen);
       return;
     }
     if (!activeAccount) {
@@ -531,8 +532,8 @@ export default function App() {
       if (pendingProtectedScreen.current === 'coach') {
         pendingProtectedScreen.current = null;
         setActiveExerciseId('squats');
-        setCoachReturnScreen('plan');
-        routeTo('coach');
+        setCoachReturnScreen('dashboard');
+        routeTo('coach', { replace: true });
       } else {
         routeTo('plan');
       }
@@ -557,8 +558,8 @@ export default function App() {
     if (pendingProtectedScreen.current === 'coach') {
       pendingProtectedScreen.current = null;
       setActiveExerciseId('squats');
-      setCoachReturnScreen('plan');
-      routeTo('coach');
+      setCoachReturnScreen('dashboard');
+      routeTo('coach', { replace: true });
     } else {
       routeTo('plan');
     }
@@ -646,16 +647,18 @@ export default function App() {
     navigate(nextScreen);
   }
 
-  function handleCameraGuided() {
-    pendingProtectedScreen.current = 'coach';
-    const activeAccount = ['signed-in', 'guest', 'demo'].includes(auth.status);
-    if (!activeAccount) return false;
-    if (!profileIsComplete(profile)) {
-      navigate('profile');
-      return true;
+  const handleCoachBack = useCallback(() => {
+    if (coachReturnScreen && APP_SCREENS.has(coachReturnScreen) && coachReturnScreen !== 'coach') {
+      navigate(coachReturnScreen);
+      return;
     }
-    pendingProtectedScreen.current = null;
-    handleStartCoach('squats', 'welcome');
+    goBack();
+  }, [coachReturnScreen, goBack, navigate]);
+
+  function handleCameraGuided() {
+    setActiveExerciseId('squats');
+    setCoachReturnScreen('welcome');
+    routeTo('preview');
     return true;
   }
 
@@ -742,21 +745,27 @@ export default function App() {
   const hasProfile = profileIsComplete(profile);
   const persistenceMode = signedIn ? 'account' : demoMode ? 'demo' : 'guest';
   const displayName = profile.displayName || auth.user?.name || (demoMode ? 'Judge' : auth.status === 'guest' ? 'Guest' : '');
-  const showAppHeader = screen !== 'welcome' && screen !== 'coach';
-  const showShellNavigation = appActive && hasProfile && !['welcome', 'coach'].includes(screen);
+  const showAppHeader = screen !== 'welcome' && screen !== 'coach' && screen !== 'preview';
+  const showShellNavigation = appActive && hasProfile && !['welcome', 'coach', 'preview'].includes(screen);
 
   return (
-    <div className={'app ' + (screen === 'coach' ? 'app-coach ' : '') + (showShellNavigation ? 'app-with-nav' : '')}>
-      {showLaunch && <LaunchScreen onComplete={finishLaunch} />}
+    <div className={'app ' + (['coach', 'preview'].includes(screen) ? 'app-coach ' : '') + (showShellNavigation ? 'app-with-nav' : '')}>
+      {showLaunch && <LaunchScreen />}
       <div inert={showLaunch ? '' : undefined} aria-hidden={showLaunch || undefined}>
       {showAppHeader && <AppHeader screen={screen} showPrimaryNavigation={appActive && hasProfile} onBack={goBack} onHome={goHome} onNavigate={handleNavigate} user={auth.user} status={auth.status} displayName={displayName} onSignOut={handleSignOut} onExitGuest={handleExitGuest} />}
 
       {screen === 'welcome' && <WelcomeScreen auth={auth} displayName={displayName} hasProfile={hasProfile} onGoogleCredential={handleGoogleCredential} onSignOut={handleSignOut} onExitGuest={handleExitGuest} onContinueGuest={handleContinueGuest} onContinue={() => navigate(hasProfile ? 'dashboard' : 'profile')} onCameraGuided={handleCameraGuided} onJudgeDemo={startJudgeDemo} onProgress={() => navigate('progress')} onLeaderboard={() => navigate('leaderboard')} onNavigate={handleNavigate} />}
+      {screen === 'preview' && <Suspense fallback={<main className="screen-page"><p role="status">Loading Camera Coach preview…</p><button className="button button-quiet" onClick={handleCoachBack}>Back</button></main>}><CoachScreen exerciseId={activeExerciseId} previewMode={true} onBack={handleCoachBack} onHome={goHome} onSelectExercise={(id) => setActiveExerciseId(id)} /></Suspense>}
+      {screen === 'features' && <FeaturesScreen onNavigate={handleNavigate} onStartCoach={handleStartCoach} appActive={appActive} hasProfile={hasProfile} />}
+      {screen === 'how-it-works' && <HowItWorksScreen onNavigate={handleNavigate} onStartCoach={handleStartCoach} appActive={appActive} hasProfile={hasProfile} />}
+      {screen === 'terms' && <TermsScreen onNavigate={handleNavigate} appActive={appActive} hasProfile={hasProfile} />}
+      {screen === 'privacy' && <PrivacyScreen onNavigate={handleNavigate} appActive={appActive} hasProfile={hasProfile} />}
+      {screen === 'health-disclaimer' && <HealthDisclaimerScreen onNavigate={handleNavigate} appActive={appActive} hasProfile={hasProfile} />}
       {screen === 'dashboard' && <DashboardScreen displayName={displayName} profile={profile} plan={plan} planState={planState} sessions={sessions} progressState={progressState} onRetryProgress={refreshSessions} onRetryPlan={handleRetryPlan} persistenceMode={persistenceMode} onNavigate={handleNavigate} onStartCoach={handleStartCoach} onCreatePlan={handleCreatePlan} />}
       {screen === 'workouts' && <WorkoutLibraryScreen onStartCoach={handleStartCoach} onNavigate={handleNavigate} />}
       {screen === 'profile' && <ProfileScreen key={auth.status + '-' + (hasProfile ? 'edit' : 'new')} initialProfile={profileDraft || profile} signedIn={signedIn} demoMode={demoMode} accountName={auth.user?.name} hasExistingProfile={hasProfile} onDraftChange={setProfileDraft} onSubmit={handleProfileSubmit} onBack={() => appActive && hasProfile ? navigate('dashboard') : goBack()} />}
       {screen === 'plan' && <PlanScreen profile={profile} plan={plan} sessions={sessions} progressState={progressState} onRetryProgress={refreshSessions} planState={planState} planErrorAction={planErrorAction} onRetryPlan={handleRetryPlan} onStartCoach={handleStartCoach} onCreatePlan={handleCreatePlan} onExplore={() => navigate('dashboard')} onBack={() => navigate('dashboard')} />}
-      {screen === 'coach' && <Suspense fallback={<main className="screen-page"><p role="status">Loading your camera coach…</p><button className="button button-quiet" onClick={goBack}>Back</button></main>}><CoachScreen exerciseId={activeExerciseId} onBack={goBack} onHome={goHome} onEndSession={handleEndSession} /></Suspense>}
+      {screen === 'coach' && <Suspense fallback={<main className="screen-page"><p role="status">Loading your camera coach…</p><button className="button button-quiet" onClick={handleCoachBack}>Back</button></main>}><CoachScreen exerciseId={activeExerciseId} onBack={handleCoachBack} onHome={goHome} onEndSession={handleEndSession} /></Suspense>}
       {screen === 'result' && result && <ResultScreen result={result} profile={profile} saveState={resultSaveState} automaticSave={signedIn} onSave={handleSaveResult} onHome={() => navigate('dashboard')} onProgress={() => navigate('progress')} onRetry={() => handleStartCoach(activeExerciseId, 'result')} />}
       {screen === 'progress' && <ProgressScreen sessions={sessions} loadState={progressState} persistenceMode={persistenceMode} onRetry={() => refreshSessions()} onHome={() => navigate('dashboard')} onStart={() => navigate('workouts')} />}
       {screen === 'leaderboard' && <LeaderboardScreen user={auth.user} accountSyncAvailable={auth.accountSyncAvailable} onHome={() => appActive ? navigate('dashboard') : routeTo('welcome')} />}

@@ -7,9 +7,24 @@ export const APP_SCREENS = new Set([
   'progress',
   'leaderboard',
   'profile',
+  'features',
+  'how-it-works',
+  'terms',
+  'privacy',
+  'health-disclaimer',
+  'preview',
 ]);
 
-const PUBLIC_SCREENS = new Set(['welcome', 'leaderboard']);
+export const PUBLIC_SCREENS = new Set([
+  'welcome',
+  'leaderboard',
+  'features',
+  'how-it-works',
+  'terms',
+  'privacy',
+  'health-disclaimer',
+  'preview',
+]);
 
 export function screenFromHash(hash = '') {
   const route = hash.replace(/^#\/?/, '');
