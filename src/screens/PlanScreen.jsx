@@ -2,6 +2,7 @@ import { ArrowRight, Check, Clock3, Info, LayoutDashboard, Sparkles } from 'luci
 import ExerciseCard from '../components/ExerciseCard';
 import FoodGuidanceCard from '../components/FoodGuidanceCard';
 import ScreenHeader from '../components/ScreenHeader';
+import { planActivity } from '../utils/planActivity';
 
 export default function PlanScreen({ profile, plan, sessions, progressState, onRetryProgress, planState, planErrorAction, onRetryPlan, onStartCoach, onCreatePlan, onExplore, onBack }) {
   if (!plan || planState === 'loading' || planState === 'error') {
@@ -15,11 +16,7 @@ export default function PlanScreen({ profile, plan, sessions, progressState, onR
     );
   }
 
-  const completedIds = new Set(sessions.filter((session) =>
-    Number(session.reps) > 0 && plan.createdAt && new Date(session.completedAt) >= new Date(plan.createdAt),
-  ).map((session) => session.exerciseId));
-  const cameraExercises = plan.exercises.filter((exercise) => exercise.cameraSupported);
-  const firstCameraExercise = cameraExercises.find((exercise) => !completedIds.has(exercise.id)) || cameraExercises[0];
+  const { practicedIds: completedIds, cameraExercises, nextExercise: firstCameraExercise } = planActivity(plan, sessions);
   const completedCount = cameraExercises.filter((exercise) => completedIds.has(exercise.id)).length;
   const completion = Math.round((completedCount / Math.max(1, cameraExercises.length)) * 100);
 
@@ -37,9 +34,9 @@ export default function PlanScreen({ profile, plan, sessions, progressState, onR
       </section>
 
       <section className="plan-decision panel">
-        <div><span className="eyebrow">Your plan is ready</span><h2>Train now—or come back when it fits.</h2><p>Your plan stays saved, ready whenever you are.</p></div>
+        <div><span className="eyebrow">Your plan is ready</span><h2>Train now—or come back when it fits.</h2><p>Start with the warm-up below. Camera coaching tracks one movement at a time; follow the listed intervals at your own pace.</p></div>
         <div>
-          <button className="button button-primary" onClick={() => firstCameraExercise && onStartCoach(firstCameraExercise.id, 'plan')} disabled={!firstCameraExercise}>Start today’s workout <ArrowRight size={17} /></button>
+          {firstCameraExercise && <button className="button button-primary" onClick={() => onStartCoach(firstCameraExercise.id, 'plan')}>Practice {firstCameraExercise.name} <ArrowRight size={17} /></button>}
           <button className="button button-quiet" onClick={onExplore}><LayoutDashboard size={17} /> Explore dashboard</button>
         </div>
       </section>

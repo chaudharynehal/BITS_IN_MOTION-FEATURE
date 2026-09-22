@@ -25,8 +25,8 @@ import UserMenu from '../components/UserMenu';
 
 function CameraCoachPreview({ onTryCoach }) {
   return (
-    <div className="product-visual" aria-label="Interactive preview of live Camera Coach and pose tracking">
-      <span className="product-preview-label">Live Camera Coach Preview</span>
+    <div className="product-visual" aria-label="Illustration of Camera Coach and pose tracking">
+      <span className="product-preview-label">Camera Coach · illustrative preview</span>
 
       <article className="visual-camera-card">
         {/* Top Camera Bar */}
@@ -119,7 +119,7 @@ function CameraCoachPreview({ onTryCoach }) {
 
           <div className="hud-reps-card">
             <div>
-              <span className="hud-label">Verified Reps</span>
+              <span className="hud-label">Example reps</span>
               <strong>12 <small>/ 15</small></strong>
             </div>
             <div className="hud-progress-bar">
@@ -198,7 +198,7 @@ export default function WelcomeScreen({
   }
 
   function handleCameraClick() {
-    // Calling onCameraGuided starts the guest / camera coach flow directly without requiring Google sign in.
+    // Preview is independent of Guest mode and never saves a workout.
     onCameraGuided?.();
   }
 

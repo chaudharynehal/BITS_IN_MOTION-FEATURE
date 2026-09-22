@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Camera, Check, Dumbbell, ScanLine, ShieldCheck, Sparkles } from 'lucide-react';
 import { EXERCISES } from '../data/exercises';
+import { MOVEMENT_SPACE } from '../../shared/recommendation';
 
 const LIBRARY = Object.values(EXERCISES);
 
@@ -17,8 +18,8 @@ export default function WorkoutLibraryScreen({ onStartCoach, onNavigate }) {
 
       <div className="library-toolbar">
         <div className="library-filters" aria-label="Filter workouts">
-          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}><Dumbbell size={16} /> All movements</button>
-          <button className={filter === 'camera' ? 'active' : ''} onClick={() => setFilter('camera')}><Camera size={16} /> Camera guided</button>
+          <button className={filter === 'all' ? 'active' : ''} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}><Dumbbell size={16} /> All movements</button>
+          <button className={filter === 'camera' ? 'active' : ''} aria-pressed={filter === 'camera'} onClick={() => setFilter('camera')}><Camera size={16} /> Camera guided</button>
         </div>
         <button className="text-button" onClick={() => onNavigate('plan')}>View my personal plan</button>
       </div>
@@ -34,13 +35,16 @@ export default function WorkoutLibraryScreen({ onStartCoach, onNavigate }) {
             <h2>{exercise.name}</h2>
             <p>{exercise.instruction}</p>
             <div className="library-details">
-              <span><strong>Target</strong>{exercise.duration}</span>
-              <span><strong>Equipment</strong>{exercise.id === 'rows' ? 'Backpack' : 'None'}</span>
+              <span><strong>Example target</strong>{exercise.duration}</span>
+              <span><strong>Equipment</strong>{exercise.equipment}</span>
+              <span><strong>Level / impact</strong>{exercise.minLevel} · {exercise.impact}</span>
+              <span><strong>Space</strong>{MOVEMENT_SPACE[exercise.id] === 'open' ? 'Open space' : 'Small space'}</span>
             </div>
+            <p className="field-help">{exercise.primaryMuscles.join(' · ')}</p>
             {exercise.cameraSupported ? (
               <button className="button button-primary" onClick={() => onStartCoach(exercise.id, 'workouts')}><ScanLine size={17} /> Start camera coach</button>
             ) : (
-              <button className="button button-quiet" onClick={() => onNavigate('plan')}><Sparkles size={17} /> Open my plan</button>
+              <span className="field-help">Self-guided movement · written cues only</span>
             )}
           </article>
         ))}

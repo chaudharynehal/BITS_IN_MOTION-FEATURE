@@ -176,10 +176,10 @@ export default function HealthDisclaimerScreen({ onNavigate, appActive, hasProfi
           </div>
           <div className="terms-section-content">
             <p>
-              Exercise routines should match your current physical fitness level, not your aspirational goals. BITS in Motion includes a "Low impact only" profile preference:
+              Exercise routines should match your current physical fitness level, not your aspirational goals. BITS in Motion includes a “Prefer low-impact movements” profile preference:
             </p>
             <ul>
-              <li><strong>Low-Impact Workouts:</strong> Eliminates high-impact ballistic movements (such as jumping jacks) in favor of joint-friendly exercises with lower ground-reaction forces.</li>
+              <li><strong>Low-Impact Preference:</strong> Selects catalogue movements labelled low impact and excludes jumping jacks and moderate-impact lunges. This label does not establish medical suitability or guarantee safety.</li>
               <li><strong>Warm-Up & Cooldown:</strong> Always complete recommended warm-up mobility exercises and post-workout cooldown stretches to prepare muscles and aid cardiovascular recovery.</li>
               <li><strong>Progression Pacing:</strong> If you are a beginner, commence with shorter durations (e.g., 10–15 minutes) and modest repetition counts before advancing to higher volume.</li>
             </ul>

@@ -34,7 +34,7 @@ export default function FeaturesScreen({ onNavigate, onStartCoach, appActive, ha
             <button
               className="button button-primary"
               type="button"
-              onClick={() => (onStartCoach ? onStartCoach('squats', 'features') : onNavigate('coach'))}
+              onClick={() => appActive && hasProfile ? onStartCoach('squats', 'features') : onNavigate('preview')}
             >
               <Camera size={18} /> Try Camera Coach
             </button>
@@ -85,7 +85,7 @@ export default function FeaturesScreen({ onNavigate, onStartCoach, appActive, ha
             <button
               className="button button-primary"
               type="button"
-              onClick={() => (onStartCoach ? onStartCoach('squats', 'features') : onNavigate('coach'))}
+              onClick={() => appActive && hasProfile ? onStartCoach('squats', 'features') : onNavigate('preview')}
             >
               <ScanLine size={16} /> Launch squat coach <ChevronRight size={16} />
             </button>
@@ -104,12 +104,12 @@ export default function FeaturesScreen({ onNavigate, onStartCoach, appActive, ha
               Rule-based, transparent workout plans tailored specifically to student constraints. No mysterious black-box algorithms: you see exactly why every movement was selected.
             </p>
             <ul className="feature-bullets">
-              <li><strong>Fitness Goals:</strong> Stay fit, Build muscle, Weight loss, Cardio endurance.</li>
-              <li><strong>Experience Levels:</strong> Beginner, Intermediate, and Advanced progression pacing.</li>
-              <li><strong>Time Windows:</strong> 15, 20, 30, or 45-minute daily session options.</li>
-              <li><strong>Real Environments:</strong> Hostel room, Home, Campus grounds, or Gym presets.</li>
-              <li><strong>Equipment Matching:</strong> None (bodyweight-only), Resistance bands, Dumbbells, Full gym.</li>
-              <li><strong>Joint Care:</strong> Optional Low-Impact mode that removes high-stress jumping or heavy joint impact.</li>
+              <li><strong>Fitness Goals:</strong> Stay fit, Build strength, or Support weight management.</li>
+              <li><strong>Experience Levels:</strong> Beginner and Intermediate pacing with different work/recovery intervals.</li>
+              <li><strong>Time Windows:</strong> 10, 20, 30, 45, or 60 minutes including warm-up and recovery.</li>
+              <li><strong>Real Environments:</strong> Small hostel/PG/home spaces or open indoor, campus, outdoor and gym spaces.</li>
+              <li><strong>Equipment Matching:</strong> Bodyweight or Backpack. Backpack rows require intermediate experience.</li>
+              <li><strong>Impact Preference:</strong> Low-impact selection excludes jumping and moderate-impact movements; it is not medical guidance.</li>
             </ul>
           </div>
         </article>
@@ -129,7 +129,7 @@ export default function FeaturesScreen({ onNavigate, onStartCoach, appActive, ha
               <li><strong>Lower Body:</strong> Bodyweight squats (camera-guided), reverse lunges.</li>
               <li><strong>Upper Body:</strong> Incline / knee push-ups (camera-guided), backpack rows with textbook weight.</li>
               <li><strong>Core & Torso:</strong> Controlled crunches (camera-guided), supported planks.</li>
-              <li><strong>Cardio & Recovery:</strong> Jumping jacks (camera-guided), dynamic mobility warm-ups, and breathing cool-downs.</li>
+              <li><strong>Cardio & Recovery:</strong> Jumping jacks (camera-guided), low-impact marching, mobility warm-ups, and breathing cool-downs.</li>
               <li><strong>Muscle Activation:</strong> Every exercise identifies primary and secondary target muscle groups.</li>
             </ul>
           </div>
@@ -158,7 +158,7 @@ export default function FeaturesScreen({ onNavigate, onStartCoach, appActive, ha
             <div className="feature-comparison-grid">
               <div className="comparison-col">
                 <strong>Guest Mode (Local Only)</strong>
-                <p>Instant start without creating an account. Profiles, workouts, and plans stay 100% inside your browser’s localStorage. Zero network logging.</p>
+                <p>Instant start without creating an account. Profiles, workouts, and plans stay 100% inside your browser’s localStorage. Guest fitness records are not synced to an account.</p>
               </div>
               <div className="comparison-col">
                 <strong>Google Account Mode (Cloud Sync)</strong>
@@ -183,10 +183,10 @@ export default function FeaturesScreen({ onNavigate, onStartCoach, appActive, ha
               Turn movement into quantifiable momentum without unhealthy obsession over body weight or vanity metrics.
             </p>
             <ul className="feature-bullets">
-              <li><strong>Energy Estimation:</strong> Evidence-based MET (Metabolic Equivalent of Task) formula combined with user body weight and active duration.</li>
+              <li><strong>Energy Estimation:</strong> Evidence-based MET (Metabolic Equivalent of Task) formula combined with user body weight and camera-session duration.</li>
               <li><strong>Form Quality Summaries:</strong> Logs reps completed, camera interruptions, and posture cues triggered.</li>
               <li><strong>Consistency Calendar:</strong> 7-day rolling activity indicators celebrate sticking to your routine.</li>
-              <li><strong>Session History:</strong> Chronological record of completed workouts, reps, and calories burned.</li>
+              <li><strong>Session History:</strong> Chronological record of completed workouts, reps, and estimated calories.</li>
             </ul>
           </div>
         </article>
@@ -204,7 +204,7 @@ export default function FeaturesScreen({ onNavigate, onStartCoach, appActive, ha
             </p>
             <ul className="feature-bullets">
               <li><strong>Strictly Opt-In:</strong> You must explicitly choose to participate; default is private.</li>
-              <li><strong>Custom Privacy Alias:</strong> Choose a public handle so your real name and Google email are never displayed.</li>
+              <li><strong>Custom Privacy Alias:</strong> Choose a public alias instead of your real name. Google email is never displayed.</li>
               <li><strong>Weekly & All-Time Rankings:</strong> Community totals show collective campus fitness momentum.</li>
             </ul>
           </div>
@@ -231,7 +231,7 @@ export default function FeaturesScreen({ onNavigate, onStartCoach, appActive, ha
           <button
             className="button button-primary button-large"
             type="button"
-            onClick={() => (onStartCoach ? onStartCoach('squats', 'features') : onNavigate('coach'))}
+            onClick={() => appActive && hasProfile ? onStartCoach('squats', 'features') : onNavigate('preview')}
           >
             <Camera size={19} /> Start Camera Coach
           </button>

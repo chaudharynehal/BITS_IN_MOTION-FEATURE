@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  guestStorageWarning,
   createJudgeDemoHistory,
   getProgressSummary,
   isGuestModeActive,
@@ -33,10 +34,38 @@ describe('guest-only local persistence', () => {
   });
 
   it('keeps a generated guest plan without creating a workout session', () => {
-    const plan = { id: 'guest-plan', title: '20-minute hostel workout', exercises: [] };
+    const plan = { id: 'guest-plan', title: '20-minute hostel workout', focus: 'Fitness', reasons: [], totalMinutes: 20, exercises: [{ id: 'squats', name: 'Squats', duration: '3 min', category: 'Lower body', instruction: 'Move comfortably.' }] };
     expect(saveGuestPlan(plan)).toBe(true);
     expect(loadGuestPlan()).toEqual(plan);
     expect(loadGuestSessions()).toEqual([]);
+  });
+
+  it.each(['null', '{}', '42', '"bad"'])('recovers wrong-shaped history %s without changing original storage', (value) => {
+    values.set('bits-motion-sessions-v1', value);
+    expect(loadGuestSessions()).toEqual([]);
+    expect(guestStorageWarning()).toContain('could not be read');
+    expect(values.get('bits-motion-sessions-v1')).toBe(value);
+  });
+
+  it('keeps valid history while rejecting invalid dates and negative metrics', () => {
+    const valid = { id: 'ok', completedAt: new Date().toISOString(), reps: 5 };
+    values.set('bits-motion-sessions-v1', JSON.stringify([null, valid, { ...valid, id: 'bad', completedAt: 'invalid' }, { ...valid, reps: -1 }]));
+    expect(loadGuestSessions()).toEqual([valid]);
+    expect(saveGuestSession(valid)).toBe(false);
+  });
+
+  it('rejects malformed saved plans and profiles without crashing', () => {
+    values.set('bits-motion-plan-v1', JSON.stringify({ exercises: 'bad' }));
+    values.set('bits-motion-profile-v1', '[]');
+    expect(loadGuestPlan()).toBeNull();
+    expect(loadGuestProfile()).toBeNull();
+  });
+
+  it('keeps retries idempotent in Guest history', () => {
+    const session = { id: 'same', completedAt: new Date().toISOString(), reps: 3 };
+    saveGuestSession(session);
+    saveGuestSession(session);
+    expect(loadGuestSessions()).toHaveLength(1);
   });
 
   it('remembers an intentional guest session separately from guest data', () => {

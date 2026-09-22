@@ -2,12 +2,20 @@ const PROFILE_KEY = 'bits-motion-profile-v1';
 const SESSION_KEY = 'bits-motion-sessions-v1';
 const PLAN_KEY = 'bits-motion-plan-v1';
 const GUEST_ACTIVE_KEY = 'bits-motion-guest-active-v1';
+const invalidKeys = new Set();
+const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+export function guestStorageWarning() {
+  return invalidKeys.size ? 'Some saved Guest data could not be read. Valid records were kept; review your profile and plan. Browser storage was not deleted.' : '';
+}
 
 function readJson(key, fallback) {
+  invalidKeys.delete(key);
   try {
     const value = localStorage.getItem(key);
     return value ? JSON.parse(value) : fallback;
   } catch {
+    invalidKeys.add(key);
     return fallback;
   }
 }
@@ -22,7 +30,13 @@ function writeJson(key, value) {
 }
 
 export function loadGuestProfile() {
-  return readJson(PROFILE_KEY, null);
+  const profile = readJson(PROFILE_KEY, null);
+  if (profile === null) return null;
+  if (!isObject(profile) || Object.values(profile).some((value) => value !== null && typeof value === 'object')) {
+    invalidKeys.add(PROFILE_KEY);
+    return null;
+  }
+  return profile;
 }
 
 export function saveGuestProfile(profile) {
@@ -30,7 +44,16 @@ export function saveGuestProfile(profile) {
 }
 
 export function loadGuestPlan() {
-  return readJson(PLAN_KEY, null);
+  const plan = readJson(PLAN_KEY, null);
+  if (plan === null) return null;
+  if (!isObject(plan) || typeof plan.title !== 'string' || typeof plan.focus !== 'string'
+    || !Number.isFinite(Number(plan.totalMinutes)) || !Array.isArray(plan.reasons) || plan.reasons.some((reason) => typeof reason !== 'string')
+    || !Array.isArray(plan.exercises) || !plan.exercises.length
+    || plan.exercises.some((item) => !isObject(item) || ['id', 'name', 'duration', 'category', 'instruction'].some((key) => typeof item[key] !== 'string'))) {
+    invalidKeys.add(PLAN_KEY);
+    return null;
+  }
+  return plan;
 }
 
 export function saveGuestPlan(plan) {
@@ -56,12 +79,25 @@ export function setGuestModeActive(active) {
 }
 
 export function loadGuestSessions() {
-  return readJson(SESSION_KEY, []).sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+  const stored = readJson(SESSION_KEY, []);
+  if (!Array.isArray(stored)) {
+    invalidKeys.add(SESSION_KEY);
+    return [];
+  }
+  const sessions = stored.filter((session) => isObject(session)
+    && typeof session.id === 'string' && typeof session.completedAt === 'string'
+    && Number.isFinite(Date.parse(session.completedAt))
+    && ['reps', 'durationSeconds', 'calories'].every((field) => session[field] === undefined || Number.isFinite(Number(session[field])) && Number(session[field]) >= 0)
+    && ['exerciseId', 'exerciseName', 'formSummary', 'source'].every((field) => session[field] === undefined || typeof session[field] === 'string'));
+  if (sessions.length !== stored.length) invalidKeys.add(SESSION_KEY);
+  return sessions.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
 }
 
 export function saveGuestSession(session) {
-  const sessions = readJson(SESSION_KEY, []);
-  return writeJson(SESSION_KEY, [session, ...sessions]);
+  const sessions = loadGuestSessions();
+  // Avoid overwriting malformed historical data; let the user recover it first.
+  if (invalidKeys.has(SESSION_KEY)) return false;
+  return writeJson(SESSION_KEY, [session, ...sessions.filter((item) => item.id !== session.id)]);
 }
 
 function toLocalIsoDate(daysAgo) {

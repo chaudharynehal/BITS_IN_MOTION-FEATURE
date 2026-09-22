@@ -1,12 +1,13 @@
 # BITS in Motion — Current Project State
 
 ## Current Repository State
-- **Branch**: `feature/google-auth-user-database`
-- **Current Live Repository HEAD**: Dynamic — inspect dynamically at session start using Git (`git rev-parse HEAD`). Git is authoritative for live HEAD.
+- **Authoritative Branch**: `feature/google-auth-user-database` (unchanged)
+- **Review Branch**: `feature/full-product-quality-pass`
+- **Review Base / Current authoritative HEAD**: `5f7b161c696452d11d9618cbc31a76fcfc748c67`
 - **Last Application/Source Checkpoint**: `46c8f6d` (PR #1 merge commit)
-- **Origin Synchronization**: Synchronized with `origin/feature/google-auth-user-database`
+- **Origin Synchronization**: Authoritative branch was fetched and matched origin at review start (`0` ahead / `0` behind). Review branch changes are local and unpushed.
 - **Branch Topology**: Authoritative branch is `feature/google-auth-user-database`. No local `main` branch exists; no remote `origin/main` branch exists.
-- **Working Tree State**: Clean. Tisha's personalization contribution (PR #1) has been merged and verified.
+- **Working Tree State**: Dirty by design on the isolated review branch; all changes belong to this full product quality pass. No authoritative-branch work was overwritten.
 - **Note on Commit Hashes**: Stored commit hashes in this document describe meaningful application/deployment checkpoints, not necessarily the latest documentation-only repository commit.
 
 ## Production State
@@ -66,10 +67,33 @@
 - **Diff Check**: `git diff --check` — clean (0 whitespace issues).
 
 ## Known Open Issues
-- None.
+- Real Google OAuth, Neon round-trips and physical movement accuracy require a live environment and device; this pass used mocked account/API fixtures and synthetic camera frames for safe repeatable QA.
+- The account API still returns the latest 50 sessions by design; the UI now labels that scope and allows expanding the loaded history, but a paginated archive/export would be a future milestone.
+- BMI labels remain intentionally informational. Ages 16–19 are shown without adult category labels because age-specific BMI percentiles are not implemented.
 
 ## Work In Progress
-- None. All pending pull requests (PR #1, PR #2, PR #3) are successfully integrated, tested, and live in production.
+- Full A–Z product quality pass is implemented locally on `feature/full-product-quality-pass`; it has not been committed, pushed, merged or deployed pending user review.
+
+## Full Product Quality Pass (local, 2026-09-22)
+- **Audit scope**: Launch, homepage, onboarding/profile, client/server recommendations, Guest/account persistence, dashboard/plan/library, camera/anonymous preview, result/progress, leaderboard, trust copy, accessibility, responsive layouts, loading/error/empty states, API failure handling and security-sensitive logging.
+- **High-value bugs fixed**:
+  - Client and server recommendation logic now call the same pure rules in `shared/recommendation.js`. Time changes real intervals and volume; level changes eligibility and work/rest; goal changes ordering and emphasis; equipment changes backpack eligibility; low-impact excludes moderate/high impact; existing location values exclude jumping/travelling movements in small spaces; bounded deterministic variation avoids generic identical plans.
+  - Saved plan timing is restored from target labels without a schema change, and total plan estimates match the selected duration.
+  - Preview camera requests and streams are cancelled on navigation and exercise switching. Preview stop now returns to idle and can restart. Missing-camera and playback failures have explicit states. Preview summary is a native dialog with focus behavior and no persistence.
+  - Guest localStorage now validates object shapes, dates and non-negative metrics without deleting malformed original values; retries are idempotent and the UI reports recoverable storage warnings.
+  - Dashboard continues with the next unpracticed camera movement. Library cards expose metadata and written-cue status without repeated plan buttons. Progress distinguishes saved camera sessions, latest-account scope and estimated calories.
+  - API requests have a 15-second timeout and readable connection/response errors. Server error logging no longer prints raw driver errors that could contain connection or SQL data.
+  - Tablet BMI-card positioning no longer creates horizontal overflow. Form errors have associated descriptions and focus; screen headings receive focus after navigation; reduced motion remains respected.
+  - Marketing, How It Works, Privacy and Health copy now matches implemented behavior: no unsupported Advanced, voice coaching, band/dumbbell claims, GPS, BMI-driven recommendations, or account-wide revocation claims.
+- **Files added**: `shared/profile.js`, `shared/recommendation.js`, `src/utils/planActivity.js`, `src/services/api.test.js`, `src/utils/planActivity.test.js`, `docs/FULL_PRODUCT_QUALITY_PASS.md`.
+- **Files affected**: recommendation engines, App routing/persistence, camera lifecycle, profile/dashboard/plan/library/result/progress screens, homepage and trust copy, API handler/client, storage/camera/recommendation tests, browser verification and global styles.
+- **Database status**: No schema, migration, production database or environment configuration changes. Existing profile columns and exercise metadata are sufficient.
+- **Automated verification**:
+  - `npm test`: **12 test files, 923 tests passing**.
+  - `npm run build`: Vite production build passes; no build errors.
+  - `git diff --check`: clean.
+  - `node scripts/verify-browser.mjs` against an isolated local Vite server: **109 recorded checks passing**, including mocked account isolation/retry flows, all major screens at 390/768/1024/1440px, synthetic camera permission/no-camera/restart/summary flows, Guest/account session persistence, empty leaderboard and malformed storage recovery; **0 JavaScript errors**, **0 network failures**. Deliberate mocked 401/503 responses are recorded as expected HTTP failures.
+- **Production status**: Production remains at the documented `46c8f6d26070cb43a5afdb5b1c1c0bc32251d9e9` checkpoint. No deployment or production DB operation was performed.
 
 ## Pending External Contributions
 - None. Tisha's PR #1 is merged.

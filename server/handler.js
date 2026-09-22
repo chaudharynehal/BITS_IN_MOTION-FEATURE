@@ -3,16 +3,18 @@ import { OAuth2Client } from 'google-auth-library';
 import { buildPlan } from './recommendation.js';
 import { isDatabaseConfigured, query } from './db.js';
 import { clearSessionCookie, createSessionToken, readSessionUserId, setSessionCookie } from './session.js';
+import { PROFILE_OPTIONS as PROFILE_CHOICES, LEGACY_EQUIPMENT } from '../shared/profile.js';
+import { prescriptionFromLabel } from '../shared/recommendation.js';
 
 const googleClient = new OAuth2Client();
 const MAX_JSON_BYTES = 32 * 1024;
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROFILE_OPTIONS = {
-  level: new Set(['Beginner', 'Intermediate']),
-  goal: new Set(['Stay fit', 'Build strength', 'Support weight management']),
-  location: new Set(['Hostel room', 'Home', 'Campus', 'PG room']),
-  equipment: new Set(['None', 'Resistance band', 'Dumbbells', 'Backpack']),
+  level: new Set(PROFILE_CHOICES.level),
+  goal: new Set(PROFILE_CHOICES.goal),
+  location: new Set(PROFILE_CHOICES.location),
+  equipment: new Set([...PROFILE_CHOICES.equipment, ...LEGACY_EQUIPMENT]),
 };
 
 class RequestError extends Error {
@@ -285,6 +287,7 @@ function mapPlanExercise(row) {
     name: row.exercise_name,
     category: row.exercise_category,
     duration: row.target_label,
+    ...prescriptionFromLabel(row.target_label),
     instruction: row.exercise_instruction,
     icon: row.exercise_icon,
     cameraSupported: row.camera_supported,
@@ -514,7 +517,8 @@ export async function handleApiRequest(req, res) {
     if (error.code === '42P01' || error.code === '42703') {
       return send(res, 503, { error: 'The account database has not been initialized. Run the database setup command.', code: 'DATABASE_SETUP_REQUIRED' });
     }
-    console.error('BITS in Motion API error', error);
+    // Never print driver errors: they can contain connection strings or SQL data.
+    console.error('BITS in Motion API request failed.');
     return send(res, 500, { error: 'The server could not complete this request.', code: 'SERVER_ERROR' });
   }
 }

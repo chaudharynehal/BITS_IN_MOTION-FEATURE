@@ -1,0 +1,28 @@
+export const PROFILE_OPTIONS = {
+  level: ['Beginner', 'Intermediate'],
+  goal: ['Stay fit', 'Build strength', 'Support weight management'],
+  time: ['10', '20', '30', '45', '60'],
+  location: ['Hostel room', 'Home', 'Campus', 'PG room', 'Open indoor space', 'Outdoor', 'Gym'],
+  equipment: ['None', 'Backpack'],
+};
+export const LEGACY_EQUIPMENT = ['Resistance band', 'Dumbbells'];
+export const LOCATION_LABELS = { 'Hostel room': 'Hostel room / small space', 'PG room': 'PG room / small space', Home: 'Home / small space', Campus: 'Campus / open space' };
+
+export function profileErrors(profile = {}) {
+  const errors = {};
+  const name = String(profile.displayName || '').trim();
+  if (!name || name.length > 80) errors.displayName = 'Enter a preferred name between 1 and 80 characters.';
+  for (const [field, min, max, label] of [['age', 16, 80, 'Age'], ['height', 120, 230, 'Height'], ['weight', 30, 250, 'Weight']]) {
+    const value = Number(profile[field]);
+    if (!Number.isFinite(value) || value < min || value > max) errors[field] = `${label} must be between ${min} and ${max}.`;
+  }
+  if (!Number.isInteger(Number(profile.age))) errors.age = 'Enter your age in whole years.';
+  const time = Number(profile.time);
+  if (!Number.isInteger(time) || time < 5 || time > 120) errors.time = 'Choose between 5 and 120 whole minutes.';
+  for (const field of ['level', 'goal', 'location', 'equipment']) {
+    const allowed = field === 'equipment' ? [...PROFILE_OPTIONS.equipment, ...LEGACY_EQUIPMENT] : PROFILE_OPTIONS[field];
+    if (!allowed.includes(profile[field])) errors[field] = 'Please choose a valid option.';
+  }
+  if (profile.leaderboardOptIn && (!String(profile.leaderboardName || '').trim() || String(profile.leaderboardName).trim().length > 40)) errors.leaderboardName = 'Choose a public alias between 1 and 40 characters.';
+  return errors;
+}

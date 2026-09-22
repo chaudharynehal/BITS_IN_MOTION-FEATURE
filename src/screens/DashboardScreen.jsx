@@ -16,6 +16,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import { getProgressSummary } from '../utils/storage';
+import { planActivity } from '../utils/planActivity';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -61,7 +62,7 @@ export default function DashboardScreen({
 }) {
   const summary = getProgressSummary(sessions);
   const activity = weeklyActivity(sessions);
-  const firstCameraExercise = plan?.exercises?.find((exercise) => exercise.cameraSupported);
+  const { nextExercise: firstCameraExercise } = planActivity(plan, sessions);
   const recent = sessions[0];
 
   return (
@@ -91,12 +92,14 @@ export default function DashboardScreen({
                 <button className="button button-primary" onClick={onRetryPlan}><RefreshCw size={18} /> Retry plan</button>
               ) : firstCameraExercise ? (
                 <button className="button button-primary" onClick={() => onStartCoach(firstCameraExercise.id, 'dashboard')}>
-                  <Camera size={18} /> Start {shortExerciseName(firstCameraExercise)}
+                  <Camera size={18} /> Practice {shortExerciseName(firstCameraExercise)}
                 </button>
+              ) : plan ? (
+                <button className="button button-primary" onClick={() => onNavigate('plan')}>Follow my plan <ArrowRight size={17} /></button>
               ) : (
                 <button className="button button-primary" onClick={onCreatePlan}><Sparkles size={18} /> Create my plan</button>
               )}
-              <button className="button button-on-dark" onClick={() => onNavigate('plan')}>View my plan <ArrowRight size={17} /></button>
+              {firstCameraExercise && <button className="button button-on-dark" onClick={() => onNavigate('plan')}>View my plan <ArrowRight size={17} /></button>}
             </div>
           </div>
           <div className="dashboard-pose" aria-hidden="true">
@@ -115,7 +118,7 @@ export default function DashboardScreen({
 
         <article className="dashboard-progress panel">
           <div className="dashboard-card-heading">
-            <div><span className="eyebrow">This week</span><h2>Your momentum</h2></div>
+            <div><span className="eyebrow">Activity overview</span><h2>Your momentum</h2></div>
             <button type="button" onClick={() => onNavigate('progress')} aria-label="Open progress"><ChevronRight size={20} /></button>
           </div>
           {progressState === 'loading' ? (
@@ -126,10 +129,10 @@ export default function DashboardScreen({
             {activity.map((day) => <div key={day.date}><i style={{ height: (18 + Math.min(day.count, 3) * 18) + 'px' }} className={day.count ? 'active' : ''} /><span>{day.label}</span></div>)}
           </div>
           <div className="dashboard-stats">
-            <span><strong>{summary.workouts}</strong> workouts</span>
+            <span><strong>{summary.workouts}</strong> saved sessions</span>
             <span><strong>{summary.reps}</strong> tracked reps</span>
             <span><strong>{summary.streak}</strong> day streak</span>
-          </div></>}
+          </div><p className="field-help">Chart: last 7 days. Totals use {persistenceMode === 'account' ? 'your latest 50 account sessions' : 'your saved sessions'}.</p></>}
         </article>
 
         <article className="dashboard-plan panel">
@@ -147,7 +150,7 @@ export default function DashboardScreen({
               <div className="plan-mini-list">
                 {plan.exercises.slice(0, 4).map((exercise, index) => <span key={exercise.id}><i>{index + 1}</i>{exercise.name}</span>)}
               </div>
-              <button className="text-button" onClick={() => onNavigate('plan')}>Open full plan <ArrowRight size={16} /></button>
+              <p className="field-help">{plan.reasons.find((reason) => reason.includes('space:'))}</p>
             </>
           ) : (
             <div className="dashboard-inline-state"><span>Your profile is ready. Create a plan whenever you want.</span><button onClick={onCreatePlan}><Sparkles size={15} /> Create plan</button></div>

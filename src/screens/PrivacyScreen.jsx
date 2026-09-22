@@ -124,7 +124,7 @@ export default function PrivacyScreen({ onNavigate, appActive, hasProfile }) {
             </p>
             <ul>
               <li><strong>No Authentication Required:</strong> No Google sign-in or guest profile creation is requested.</li>
-              <li><strong>Zero Database Interaction:</strong> No requests are sent to our Neon PostgreSQL database.</li>
+              <li><strong>No Preview Writes:</strong> Preview metrics are never sent to the account API. If you already have a signed-in session, the app may separately restore your existing account.</li>
               <li><strong>Zero LocalStorage Persistence:</strong> Repetition counts, exercise durations, and estimated calories during preview mode are kept purely in volatile React state.</li>
               <li><strong>Immediate Ephemeral Cleanup:</strong> When you exit the preview or close the browser tab, all session metrics are instantly discarded and never merged into any subsequent account.</li>
             </ul>
@@ -142,9 +142,9 @@ export default function PrivacyScreen({ onNavigate, appActive, hasProfile }) {
               Users who choose to "Continue as Guest" experience complete application functionality without creating an online account:
             </p>
             <ul>
-              <li><strong>Local-Only Persistence:</strong> Guest fitness profiles, personalized workout plans, and completed workout sessions are stored exclusively in your browser's <code>localStorage</code> under <code>bits_in_motion_guest_*</code> keys.</li>
+              <li><strong>Local-Only Persistence:</strong> Guest fitness profiles, personalized workout plans, and completed workout sessions are stored exclusively in your browser’s local storage under <code>bits-motion-*-v1</code> keys.</li>
               <li><strong>No Cloud Sync:</strong> Guest data is never uploaded to remote servers or synchronized across multiple devices or browsers.</li>
-              <li><strong>User Control:</strong> You can purge all guest data at any time by clearing your browser site data or selecting "Exit guest mode" from the account menu.</li>
+              <li><strong>User Control:</strong> Clearing this site’s browser data removes Guest records. “Sign in or exit guest” leaves those records in this browser so you can resume later. Signing in does not import them into your account.</li>
             </ul>
           </div>
         </section>
@@ -179,7 +179,7 @@ export default function PrivacyScreen({ onNavigate, appActive, hasProfile }) {
             </p>
             <ul>
               <li><strong>Strict Tenant Isolation:</strong> Every database query is strictly parameterized and scoped by the authenticated user's unique ID (<code>WHERE user_id = $1</code>). No user can access or query another user's private workout sessions or personal profile attributes.</li>
-              <li><strong>Encrypted in Transit:</strong> All communications between your browser, our API serverless endpoints, and the Neon PostgreSQL database are encrypted using Transport Layer Security (TLS 1.3 / HTTPS).</li>
+              <li><strong>Encrypted in Transit:</strong> All communications between your browser, our API serverless endpoints, and the Neon PostgreSQL database are encrypted using Transport Layer Security (HTTPS / TLS).</li>
               <li><strong>What We Store:</strong> Profile inputs (height, weight, age, fitness level, primary goal, available equipment, workout space), generated plans, and session summaries (exercise type, rep count, duration, estimated calories, completion timestamp).</li>
             </ul>
           </div>
@@ -198,7 +198,7 @@ export default function PrivacyScreen({ onNavigate, appActive, hasProfile }) {
             <ul>
               <li><strong>Cryptographic HMAC Signing:</strong> Authenticated sessions are managed via signed session tokens using HMAC-SHA256 with server-side secrets.</li>
               <li><strong>HttpOnly & SameSite Protection:</strong> Session cookies are set with <code>HttpOnly</code> (preventing client-side script access to guard against cross-site scripting / XSS attacks) and <code>SameSite=Lax</code> (guarding against cross-site request forgery / CSRF).</li>
-              <li><strong>Automatic Expiration:</strong> Authentication sessions carry defined lifespans and are revoked immediately upon clicking "Sign out".</li>
+              <li><strong>Session Expiration:</strong> Sessions expire after their configured lifetime. A successful sign-out clears this browser’s session cookie; it does not revoke cookies on other devices.</li>
             </ul>
           </div>
         </section>
@@ -215,7 +215,7 @@ export default function PrivacyScreen({ onNavigate, appActive, hasProfile }) {
             </p>
             <ul>
               <li><strong>Default Opt-Out:</strong> Leaderboard participation is strictly opt-in (<code>leaderboardOptIn = false</code> by default). Your workout stats are never displayed publicly unless you explicitly enable the setting.</li>
-              <li><strong>Pseudonymous Aliases:</strong> When opting in, you can configure a dedicated public alias (<code>leaderboardName</code>). Your real name and email address are never exposed on the public leaderboard.</li>
+              <li><strong>Pseudonymous Aliases:</strong> Rankings display the public alias you choose. Avoid using your real name if you want a pseudonym. Email addresses and body measurements are not displayed.</li>
               <li><strong>Revocable Participation:</strong> You can disable leaderboard sharing at any time in your Fitness Profile, removing your entry from public rankings immediately.</li>
             </ul>
           </div>
@@ -229,10 +229,10 @@ export default function PrivacyScreen({ onNavigate, appActive, hasProfile }) {
           </div>
           <div className="terms-section-content">
             <p>
-              The workout generation algorithm uses your profile inputs (age, BMI calculated from height/weight, goal, location, equipment, and low-impact preferences) purely to construct a sensible exercise sequence.
+              Workout recommendations use fitness level, goal, time, workout setting, equipment and low-impact preference. Setting is a selected space category, not GPS or an address. Age checks eligibility; height and weight provide BMI, and weight is used for calorie estimates. BMI does not select exercises.
             </p>
             <p>
-              This algorithm runs client-side using deterministic heuristic rules. Your biometric parameters are never shared with external AI vendors, language model APIs, or commercial recommendation platforms.
+              The same deterministic rules run in the browser for Guests and on our server for signed-in accounts. Your biometric parameters are never shared with external AI vendors, language model APIs, or commercial recommendation platforms.
             </p>
           </div>
         </section>
@@ -251,7 +251,7 @@ export default function PrivacyScreen({ onNavigate, appActive, hasProfile }) {
               <li><strong>Vercel:</strong> Static site hosting and serverless API execution.</li>
               <li><strong>Neon:</strong> Serverless managed PostgreSQL database hosting.</li>
               <li><strong>Google Identity Services:</strong> Client-side OAuth library for Google Sign-In.</li>
-              <li><strong>Google CDN / jsDelivr:</strong> Delivery of static MediaPipe WASM binaries and machine learning model weights.</li>
+              <li><strong>MediaPipe:</strong> The app serves its pose model and WASM files from the same site. Processing remains inside your browser.</li>
             </ul>
             <p>
               We do NOT embed advertising networks, marketing analytics SDKs, session recording tools, or third-party behavioral trackers.
@@ -293,7 +293,7 @@ export default function PrivacyScreen({ onNavigate, appActive, hasProfile }) {
             <ul>
               <li><strong>Guest Data Purge:</strong> Clearing your browser cookies and site storage instantly and permanently purges all local guest records.</li>
               <li><strong>Account Deletion:</strong> Signed-in users can request complete deletion of their account profile, plans, and session history by contacting the project team.</li>
-              <li><strong>Data Export:</strong> You can view all saved sessions and metrics directly inside the Progress screen at any time.</li>
+              <li><strong>History Access:</strong> Progress displays locally saved Guest sessions or the latest 50 account sessions. A downloadable export is not currently provided.</li>
             </ul>
             <div className="terms-contact-card">
               <Mail size={18} />

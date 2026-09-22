@@ -19,6 +19,7 @@ import { api } from './services/api';
 import { estimateCalories, getExerciseMet } from './utils/calories';
 import {
   createJudgeDemoHistory,
+  guestStorageWarning,
   isGuestModeActive,
   loadGuestPlan,
   loadGuestProfile,
@@ -31,6 +32,8 @@ import {
 import { buildWorkoutImpact } from './utils/workoutImpact';
 import { generateWorkoutPlan } from './utils/workoutRecommendation';
 import { APP_SCREENS, PUBLIC_SCREENS, historyDepth, resolveRequestedScreen, screenFromHash } from './utils/navigation';
+import { profileErrors } from '../shared/profile.js';
+import { EXERCISES } from './data/exercises.js';
 
 const CoachScreen = lazy(() => import('./screens/CoachScreen'));
 
@@ -75,17 +78,7 @@ function normalizeProfile(profile, user) {
 }
 
 function profileIsComplete(profile) {
-  return Boolean(
-    String(profile?.displayName || '').trim()
-    && Number(profile?.age)
-    && Number(profile?.height)
-    && Number(profile?.weight)
-    && profile?.level
-    && profile?.goal
-    && profile?.time
-    && profile?.location
-    && profile?.equipment,
-  );
+  return Boolean(profile) && Object.keys(profileErrors(profile)).length === 0;
 }
 
 function requestedScreen() {
@@ -156,6 +149,15 @@ export default function App() {
   const activeResultId = useRef(null);
   const pendingProtectedScreen = useRef(null);
 
+  useEffect(() => {
+    if (showLaunch) return;
+    const heading = document.querySelector('main h1');
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    }
+  }, [screen, showLaunch]);
+
   const routeTo = useCallback((nextScreen, { replace = false } = {}) => {
     setScreen(nextScreen);
     updateLocation(nextScreen, replace);
@@ -210,12 +212,13 @@ export default function App() {
     let guestPlan = loadGuestPlan();
     if (profileIsComplete(guestProfile) && !guestPlan) {
       guestPlan = { ...generateWorkoutPlan(guestProfile), createdAt: new Date().toISOString() };
-      saveGuestPlan(guestPlan);
+      if (!guestStorageWarning()) saveGuestPlan(guestPlan);
     }
-    setAuth({ status: 'guest', user: null, accountSyncAvailable, error });
+    const guestSessions = loadGuestSessions();
+    setAuth({ status: 'guest', user: null, accountSyncAvailable, error: error || guestStorageWarning() });
     setProfile(guestProfile);
     setProfileDraft(null);
-    setSessions(loadGuestSessions());
+    setSessions(guestSessions);
     setProgressState('ready');
     setPlan(guestPlan);
     setPlanState('ready');
@@ -634,6 +637,11 @@ export default function App() {
       navigate('profile');
       return;
     }
+    const exercise = Object.values(EXERCISES).find((item) => item.id === exerciseId);
+    if (exerciseId && !exercise?.cameraSupported) {
+      navigate('workouts');
+      return;
+    }
     setActiveExerciseId(exerciseId || 'squats');
     setCoachReturnScreen(APP_SCREENS.has(returnScreen) && returnScreen !== 'coach' ? returnScreen : 'dashboard');
     routeTo('coach');
@@ -648,6 +656,10 @@ export default function App() {
   }
 
   const handleCoachBack = useCallback(() => {
+    if (historyDepth(window.history.state) > 0) {
+      goBack();
+      return;
+    }
     if (coachReturnScreen && APP_SCREENS.has(coachReturnScreen) && coachReturnScreen !== 'coach') {
       navigate(coachReturnScreen);
       return;
@@ -670,6 +682,7 @@ export default function App() {
     });
     const nextResult = {
       ...sessionMetrics,
+      completedAt: new Date().toISOString(),
       clientSessionId: globalThis.crypto.randomUUID(),
       calories,
       impact: buildWorkoutImpact(sessionMetrics),
@@ -681,7 +694,7 @@ export default function App() {
 
     if (auth.status === 'signed-in' && auth.user) {
       const revision = accountRevision.current;
-      const payload = sessionPayload({ ...nextResult, completedAt: new Date().toISOString() });
+      const payload = sessionPayload(nextResult);
       api.saveSession(payload).then((savedSession) => {
         if (accountRevision.current !== revision || activeResultId.current !== nextResult.clientSessionId) return;
         setResult((current) => ({ ...current, id: savedSession.id }));

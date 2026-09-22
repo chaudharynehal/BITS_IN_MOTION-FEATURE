@@ -44,10 +44,11 @@ export default function ResultScreen({ result, profile, saveState, automaticSave
           <p>Save this session, review your progress or head back to your dashboard. Your plan will be there whenever you’re ready.</p>
           <div className="result-actions">
             <button className="button button-primary" onClick={onSave} disabled={saved || saving}>
-              {saving ? <><Cloud size={18} /> Saving automatically…</> : saved ? <><Check size={18} /> {automaticSave ? 'Saved to your account' : 'Session saved'}</> : saveState === 'error' ? <><CloudOff size={18} /> Retry account save</> : <><Save size={18} /> Save session</>}
+              {saving ? <><Cloud size={18} /> Saving automatically…</> : saved ? <><Check size={18} /> {automaticSave ? 'Saved to your account' : 'Session saved'}</> : saveState === 'error' ? <><CloudOff size={18} /> {automaticSave ? 'Retry account save' : 'Retry browser save'}</> : <><Save size={18} /> Save session</>}
             </button>
             <button className="button button-secondary" onClick={onProgress}>View progress <ArrowRight size={18} /></button>
           </div>
+          {saveState === 'error' && !automaticSave && <p role="alert">Browser storage is unavailable or contains unreadable history. Your result is still on this screen. Check site storage before retrying.</p>}
           <button className="text-button" onClick={onRetry}><RefreshCw size={16} /> Try camera coach again</button>
         </section>
         <FoodGuidanceCard goal={profile.goal} />
