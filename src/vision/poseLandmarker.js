@@ -10,7 +10,7 @@ async function createWithDelegate(vision, delegate) {
       delegate,
     },
     runningMode: 'VIDEO',
-    numPoses: 1,
+    numPoses: 2,
     minPoseDetectionConfidence: 0.5,
     minPosePresenceConfidence: 0.5,
     minTrackingConfidence: 0.5,

@@ -1,5 +1,22 @@
 # BITS in Motion — Current Project State
 
+## Camera engine worktree — camera-v2 robustness pass (23 September 2026)
+
+- **Branch:** `agent/codex-camera-v2`.
+- **Status:** local camera-engine implementation complete and verified; not merged or deployed.
+- **Scope:** camera engine and Camera Coach technical integration only. Homepage, dashboard, profile/setup logic, equipment/location logic, recommendation eligibility, production database and deployment configuration were not changed.
+- **MediaPipe:** kept Google AI Edge MediaPipe Pose Landmarker with the local lite task model, `VIDEO` running mode, GPU with CPU fallback and local browser processing. Updated `numPoses` from 1 to 2 so the app can maintain body-continuity when another person enters the frame.
+- **Crunch detection:** replaced the crunch counter with an explicit `finding-start → extended → flexing → flexed → extending → extended` model. Crunch reps now require a stable extended baseline, meaningful torso angle range, stable flexed hold, return to extension, min/max rep duration, cooldown, visibility gates and temporary-loss recovery. The measurement layer now requires shoulder/hip/knee for crunch setup instead of incorrectly requiring the ankle, and feeds shoulder-knee and torso-compression ratios into the counter. World-landmark 3D angle support was added when available.
+- **Subject continuity:** added a privacy-preserving subject tracker based on body center, body scale, visible landmark quality and previous pose location. It prefers the first stable exercising person, follows that person if pose ordering changes, and only reacquires another pose after the tracked subject is lost for a sustained number of frames. No face recognition, biometric identity or frame persistence was introduced.
+- **Low-light/readiness:** added downsampled in-memory frame brightness sampling and readiness reasons for improve-lighting, key-joint visibility and jumping-jack overhead room. Near-dark frames are not treated as ready.
+- **Exercise setup guidance:** detector configs now expose exercise-specific setup cues for squats, push-ups, crunches and jumping jacks. The existing Camera Coach floor setup banner uses the configured floor-exercise setup text; no layout redesign was performed.
+- **Voice and lifecycle:** speech remains browser `SpeechSynthesis` only, with no cloud TTS. Cues remain optional, throttled and non-overlapping; speech is cancelled through a shared cleanup path on exercise change, reset, leaving Camera Coach, disabling voice and unmount.
+- **Mobile/performance:** camera constraints now request user-facing 16:9 video without restart loops. The frame loop samples brightness on a throttle, tracks selected pose landmarks, and avoids React state updates unless displayed camera state changes or a short UI interval elapses.
+- **Files changed:** `src/screens/CoachScreen.jsx`, `src/vision/angle.js`, `src/vision/camera.js`, `src/vision/crunchStateMachine.js`, `src/vision/exerciseDetectors.js`, `src/vision/exerciseMeasurements.js`, `src/vision/poseLandmarker.js`, new `src/vision/subjectContinuity.js`, new `src/vision/frameReadiness.js`, and related tests.
+- **Verification:** `npm test -- src/vision`: 8 suites / 42 passed. `npm test`: 17 suites / 842 passed. `npm run build`: PASS. `git diff --check`: PASS.
+- **Known limitations:** automated tests use deterministic synthetic landmarks and do not prove real-world accuracy across body types, phones, room sizes, clothing, lighting, camera placement or exercise variations. Physical-device QA remains required for crunches, squats, push-ups and jumping jacks.
+- **Recommended next step:** run manual device QA for all four camera-supported movements in normal indoor light, dim light and multi-person interruption scenarios before integration/release.
+
 ## Latest live release — cohesive homepage product experience (23 September 2026)
 
 - **Release branch:** `feature/student-homepage-experience`, based on authoritative `feature/google-auth-user-database` at `c3b53e9`. Origin was fetched and remained at that checkpoint before release.
