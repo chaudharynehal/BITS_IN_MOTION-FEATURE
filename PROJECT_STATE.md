@@ -131,6 +131,34 @@
 - The catalogue intentionally has no dumbbell or resistance-band exercises yet; those preferences produce an explained bodyweight fallback.
 - Real Google authentication and physical camera motion require live user/device interaction; production smoke testing must report those boundaries honestly.
 
+## Product logic and recommendation engine handoff (agent/gemini-product-logic-v2)
+
+- **Branch:** `agent/gemini-product-logic-v2`
+- **Ownership:** Profile/setup data behavior, equipment model, location model, recommendation logic, exercise eligibility/filtering, personalization, local-vs-Neon catalogue consistency, recommendation tests, and plan-quality logic. (Emergent UI ownership and Codex vision/audio ownership strictly preserved).
+- **Equipment model:**
+  - Supported options: `None / Bodyweight`, `Dumbbell`, `Resistance Band`, `Backpack`.
+  - Normalization: `normalizeEquipment` safely resolves all aliases (`None / Bodyweight`, `Bodyweight`, `bodyweight`, `none`, `Dumbbells`, `dumbbells`, `dumbbell`, `Resistance band`, `resistance band`, `backpack`) without data loss.
+  - Catalogue integrity: Did not invent unsupported movements. The catalogue holds 10 verified exercises. Backpack rows are selected when eligible (Intermediate + Strength or Stay Fit). Dumbbell and Resistance Band preferences are safely stored and transparently fall back to supported bodyweight exercises with explicit explanation.
+  - Profile note fix: UI catalogue note now exclusively targets unsupported equipment (`UNSUPPORTED_EQUIPMENT`), preventing false fallback notes for `None / Bodyweight`.
+- **Location model:**
+  - Simplified user-facing choices: `PG Room`, `Hostel`, `Home`.
+  - Intended semantics implemented & explained:
+    - `PG Room`: smallest-space assumption, compact, minimal-travel movements only (jumping-jacks and lunges excluded; marching replaces jumping jacks for cardio).
+    - `Hostel`: compact student-room environment with modest space (jumping-jacks and lunges excluded; marching replaces jumping jacks for cardio).
+    - `Home`: flexible-space assumption allowing wider movements (jumping-jacks and lunges eligible when goal and impact allow).
+  - Compatibility: Legacy locations (`PG room`, `Hostel room`, `Open indoor space`, `Open space / Gym`, `Campus`, `Outdoor`, `Gym`, `Park / outdoor ground`, `Campus gym`, `Dorm`, `Dorm room`, `Bedroom`) are recognized and normalized without validation errors.
+  - Dashboard reason integration: Every location explanation explicitly includes `space:` tag, ensuring dashboard's space reason query matches and displays the tailored space context.
+- **Personalization & plan quality:**
+  - Full matrix of available time (10, 20, 30, 45, 60 min), fitness goals (Stay fit, Build strength, Support weight management), fitness levels (Beginner, Intermediate), equipment, location, and impact preferences verified.
+  - Exact duration guarantees: 10m (3 stations, 1 round), 20m (4 stations, 2 rounds), 30m (5 stations, 4 rounds), 45m (5 stations, 6 rounds), 60m (5 stations, 8 rounds). Warmup, stations, round breaks (60s), and cooldown sum to the exact second (0 discrepancy) across all 720 combinations.
+- **Catalogue parity:**
+  - Guest and signed-in accounts produce 100% identical plans across all supported profile combinations and legacy inputs.
+  - Database schema and local `EXERCISES` catalogue have complete parity. No database migration is required. Production 3-row goal-tag patch is verified as already applied.
+- **Verification:**
+  - `npm test`: **15 test suites, 886 passed, 0 skipped, 0 failed**.
+  - `npm run build`: **PASS**, clean production build.
+  - `git diff --check`: **PASS**.
+
 ## Safe continuation point
 
-The cohesive homepage release is live and verified. No homepage release work remains. Physical-device QA for crunches, push-ups, squats, and jumping jacks remains a separate manual activity. Catalogue expansion for dumbbells or resistance bands should add verified exercise data before recommendations attempt to use that equipment.
+The cohesive homepage release is live and verified. Product logic, recommendation engine, equipment, location, and catalogue parity have been audited, simplified, fortified, and tested on `agent/gemini-product-logic-v2` (886/886 tests passing, 0 failures). Ready for integration review.

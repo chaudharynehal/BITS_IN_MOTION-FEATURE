@@ -43,4 +43,38 @@ describe('saved-account recommendation rules', () => {
     const plan = buildPlan({ ...profile, goal: 'Build strength', level: 'Intermediate', time: '30', equipment: 'Backpack' }, exercises);
     expect(plan.exercises.map((exercise) => exercise.id)).toContain('rows');
   });
+
+  it('guarantees identical recommendation output between Guest and Account for legacy equipment and locations', () => {
+    const legacyEquipments = ['None / Bodyweight', 'Bodyweight', 'Resistance band', 'Dumbbells'];
+    const legacyLocations = ['PG room', 'Hostel room', 'Open indoor space', 'Outdoor', 'Gym', 'Campus', 'Dorm'];
+    for (const equipment of legacyEquipments) {
+      for (const location of legacyLocations) {
+        const input = { level: 'Beginner', goal: 'Stay fit', time: '20', equipment, location, lowImpact: false };
+        const guest = generateWorkoutPlan(input);
+        const account = buildPlan(input, exercises);
+        const visible = (p) => ({
+          ...p,
+          exercises: p.exercises.map(({ active, cameraSupported, detectionType, ...item }) => ({
+            ...item,
+            cameraSupported: Boolean(cameraSupported),
+            detectionType: detectionType || null,
+          })),
+        });
+        expect(visible(account)).toEqual(visible(guest));
+      }
+    }
+  });
+
+  it('verifies exact executable duration for server-built plans across 10, 20, 30, 45, and 60 minutes', () => {
+    for (const time of [10, 20, 30, 45, 60]) {
+      const plan = buildPlan({ ...profile, time: String(time) }, exercises);
+      const warmup = plan.exercises.find((e) => e.id === 'warmup');
+      const cooldown = plan.exercises.find((e) => e.id === 'cooldown');
+      const stations = plan.exercises.filter((e) => !['warmup', 'cooldown'].includes(e.id));
+      const rounds = plan.rounds || 1;
+      const roundBreakSec = (rounds > 1 ? rounds - 1 : 0) * (plan.roundBreakSeconds || 60);
+      const totalSec = warmup.estimatedSeconds + stations.reduce((sum, s) => sum + s.estimatedSeconds, 0) + roundBreakSec + cooldown.estimatedSeconds;
+      expect(totalSec).toBe(time * 60);
+    }
+  });
 });

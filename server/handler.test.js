@@ -775,6 +775,31 @@ describe('Saved plans and ownership', () => {
       expect(response.body.profile.location).toBe(legacyLocation);
     }
   });
+
+  it('accepts and preserves legacy equipment preferences on profile update', async () => {
+    const account = await login('account-legacy-equip');
+    const cookie = cookieValue(account.cookie);
+
+    for (const legacyEquipment of ['None / Bodyweight', 'Bodyweight', 'Resistance band', 'Dumbbells']) {
+      const response = await callApi('profile', {
+        method: 'PUT',
+        cookie,
+        body: {
+          displayName: 'Test User',
+          age: '22',
+          height: '175',
+          weight: '70',
+          level: 'Beginner',
+          goal: 'Stay fit',
+          time: '20',
+          location: 'Hostel',
+          equipment: legacyEquipment,
+        },
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.profile.equipment).toBe(legacyEquipment);
+    }
+  });
 });
 
 describe('API request protection and logout', () => {
