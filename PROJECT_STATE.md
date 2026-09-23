@@ -1,8 +1,11 @@
 # BITS in Motion — Current Project State
 
-## Homepage product experience — release candidate (23 September 2026)
+## Latest live release — cohesive homepage product experience (23 September 2026)
 
 - **Release branch:** `feature/student-homepage-experience`, based on authoritative `feature/google-auth-user-database` at `c3b53e9`. Origin was fetched and remained at that checkpoint before release.
+- **Application checkpoint:** `c762655` (`feat: deliver cohesive student homepage experience`). **Production merge checkpoint:** `2720443767e21142c1c0e1309bfa421788a1ccca`.
+- **Deployment:** LIVE at `https://bits-in-motion-feature.vercel.app/`. Vercel reported `success` / `Deployment has completed` for the tested branch and production merge. Production serves `index-D8goIygc.js` and `index-zxEyYwio.css`, matching the verified build. Deployment: `https://vercel.com/chaudharynehal/bits-in-motion-feature/2iatynFNfWMFEvFdss3ed63XU5fo`.
+- **Release workflow:** feature branch pushed normally. PR creation was attempted, but the GitHub credential returned `403 Resource not accessible by personal access token`. The authoritative branch was verified unprotected with an empty applicable rules list. Following the established authorized workflow, the tested branch was merged with `--no-ff` and pushed normally. No force push, failed-check bypass, or branch-policy bypass occurred.
 - **Scope:** the entire existing homepage, not a new route or replacement application. The blue/teal identity remains, now with quiet off-white/mint surfaces, stronger student-focused typography, clear primary/secondary CTAs, integrated privacy messaging, illustrated benefit cards, a concise journey section, and a cohesive footer.
 - **FIX:** removed 409 obsolete/conflicting homepage-only CSS rules; retained the noninteractive heading-focus artifact regression fix; replaced hidden mobile navigation with a keyboard-accessible menu; fixed cramped mobile privacy copy; protected long account names; made the sign-in chooser move/restore keyboard focus; removed the demo rep counter's backwards reset and the fabricated form score. Interactive focus rings remain visible.
 - **IMPROVE:** the coach illustration is a lightweight side-view human rig with planted feet, consistent limb proportions, shared body/joint coordinates, calculated knee angle, five squat phases, a monotonically increasing demo count and one coaching cue. It is explicitly labelled an illustration, never opens the camera, pauses outside the viewport/hidden tab, supports manual pause, and stays static for reduced-motion users.
@@ -14,7 +17,9 @@
 - **Visual review:** full-page and viewport output inspected before deployment at 390×844, 430×932, 844×390, 768×1024, 820×1180, 1024×768 and 1440×900. Anonymous, expanded setup and returning Guest states covered at all seven sizes; long names additionally covered at 390, 768 and 1024. Motion/paused and reduced-motion states were checked.
 - **Local evidence:** final full-suite report at `/var/folders/d2/xq_721js4xq6jrfbfqmxp8gh0000gp/T/bits-motion-browser-shFPA3/report.json`; compiled-preview homepage report/screenshots at `/var/folders/d2/xq_721js4xq6jrfbfqmxp8gh0000gp/T/bits-homepage-5T6RDh/`.
 - **Database:** no schema or data change required. The prior three-row production goal-tag patch remains recorded below; it was not rerun for this homepage release.
-- **Release state:** verified locally; commit/push/merge and production smoke are the next step. No live-release claim is made for this candidate yet.
+- **Production smoke:** all 38 homepage checks passed against the actual production assets, with 24 viewport/full-page screenshot pairs, no console/runtime errors, failed requests or overflow. Setup/Guest route, Judge Demo entry/exit, returning Guest dashboard, mobile navigation, browser Back, Camera Preview, Features, How It Works, Leaderboard and all trust links passed. Production desktop/mobile screenshots and motion were also visually inspected. Account endpoints and Google callbacks were fixture-backed to avoid production writes; the actual live status API was checked separately and returned `databaseConfigured: true`, `googleConfigured: true`. First-party font delivery returned HTTP 200 and the live CSS contains no Google Fonts import.
+- **Production evidence:** `/var/folders/d2/xq_721js4xq6jrfbfqmxp8gh0000gp/T/bits-homepage-niO7VS/report.json` and adjacent screenshots. Actual OAuth and physical exercise performance were not claimed as automated tests. No production database writes were needed or performed for this release.
+- **Release state:** LIVE and verified. No remaining human action is required for the homepage release.
 
 ## Previous live release — homepage visual refinement
 
@@ -82,4 +87,4 @@
 
 ## Safe continuation point
 
-The new cohesive homepage is verified locally and ready for the existing production release workflow. Complete commit/push/merge, observe Vercel success and smoke-test the production assets. Physical-device QA for crunches, push-ups, squats, and jumping jacks remains a separate manual activity. Catalogue expansion for dumbbells or resistance bands should add verified exercise data before recommendations attempt to use that equipment.
+The cohesive homepage release is live and verified. No homepage release work remains. Physical-device QA for crunches, push-ups, squats, and jumping jacks remains a separate manual activity. Catalogue expansion for dumbbells or resistance bands should add verified exercise data before recommendations attempt to use that equipment.
