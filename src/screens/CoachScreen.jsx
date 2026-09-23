@@ -445,7 +445,7 @@ export default function CoachScreen({
             </aside>
           )}
 
-          <div className="camera-viewport" style={{ aspectRatio: videoAspect }}>
+          <div className="camera-viewport" style={{ aspectRatio: videoAspect }} data-running={isRunning || undefined}>
             <video ref={videoRef} playsInline muted aria-label="Live camera preview" />
             <canvas ref={canvasRef} aria-label="Pose landmark overlay" />
 
@@ -460,35 +460,48 @@ export default function CoachScreen({
 
             {isRunning && (
               <>
-                <div className="live-badge"><span /> Live · processed locally</div>
+                <div className="live-badge"><span /> Live<em> · on-device</em></div>
                 <div className={`coach-ready-indicator ${measurementValue !== null ? 'ready' : 'waiting'}`}>
                   {measurementValue !== null ? (
-                    <><Check size={14} /> Ready · start movement</>
+                    <><Check size={14} /> Tracking</>
                   ) : (
                     <><Info size={14} /> {feedback.message}</>
                   )}
                 </div>
               </>
             )}
+
+            <div className="coach-hud" aria-hidden={!isRunning || undefined}>
+              <div className="rep-card" data-testid="coach-rep-card">
+                <span>Reps</span>
+                <strong>{reps}</strong>
+                <small>{detectorConfig.name}</small>
+              </div>
+              <div className="coach-hud-metrics">
+                <div><span>Stage</span><strong>{stage}</strong></div>
+                <div><span>{detectorConfig.metricLabel}</span><strong>{measurementValue === null ? '—' : `${Math.round(measurementValue * 10) / 10}${measurementUnit}`}</strong></div>
+              </div>
+            </div>
           </div>
 
-          <div className={`coach-feedback ${feedback.tone}`} aria-live="polite">
+          <div className={`coach-feedback ${feedback.tone}`} aria-live="polite" data-testid="coach-feedback">
             <span>{feedback.tone === 'success' ? 'On track' : feedback.tone === 'warning' ? 'Adjust' : 'Coach cue'}</span>
             <strong>{feedback.message}</strong>
+          </div>
+
+          <div className="coach-controls">
+            <button className="button button-danger" onClick={handleEnd} disabled={!isRunning} data-testid="coach-end-session"><CircleStop size={18} /> End session</button>
+            {activeWorkout && <button className="button button-quiet button-quiet-dark" type="button" onClick={handleSkip} data-testid="coach-skip-movement">Skip this movement</button>}
           </div>
         </section>
 
         <aside className="coach-metrics">
-          <div className="rep-card"><span>Complete reps</span><strong>{reps}</strong><small>Stable full movement cycles</small></div>
-          <div className="metric-row"><div><span>Movement stage</span><strong>{stage}</strong></div><div><span>{detectorConfig.metricLabel}</span><strong>{measurementValue === null ? '—' : `${Math.round(measurementValue * 10) / 10}${measurementUnit}`}</strong></div></div>
           <div className="coach-guide panel-dark">
             <span className="eyebrow light">Three simple cues</span>
             <ol>{detectorConfig.guide.map((cue, index) => <li key={cue}><i>{index + 1}</i>{cue}</li>)}</ol>
           </div>
           <div className="local-processing"><ShieldCheck size={20} /><p><strong>No camera recording.</strong> Frames are processed in the browser and discarded immediately.</p></div>
           <div className="coach-disclaimer"><Info size={16} /> This prototype gives basic visible pose cues, not medical or trainer-level assessment.</div>
-          <button className="button button-danger" onClick={handleEnd} disabled={!isRunning}><CircleStop size={18} /> End session</button>
-          {activeWorkout && <button className="button button-quiet" type="button" onClick={handleSkip}>Skip this movement</button>}
         </aside>
       </div>
 

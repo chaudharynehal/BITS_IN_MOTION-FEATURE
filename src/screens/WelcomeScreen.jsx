@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Clock3,
   Dumbbell,
+  Home,
   Menu,
   ScanLine,
   ShieldCheck,
@@ -190,8 +191,9 @@ export default function WelcomeScreen({
             <span>student life.</span>
           </h1>
           <p>
-            Practical workouts for your time, space, equipment and goals. Add
-            Camera Coach for rep counting and movement cues—right in your room.
+            Practical workouts built around your time, space, equipment and
+            goals. Turn on Camera Coach and it counts your reps and cues your
+            form—right in your room.
           </p>
           <div className="home-actions">
             <button
@@ -212,6 +214,17 @@ export default function WelcomeScreen({
               <Camera size={18} /> Live Camera Coach
             </button>
           </div>
+          <ul className="home-proof" aria-label="What you get">
+            <li>
+              <Clock3 size={16} /> 10–60 minute plans
+            </li>
+            <li>
+              <Home size={16} /> PG room, hostel or home
+            </li>
+            <li>
+              <ShieldCheck size={16} /> Camera stays on your device
+            </li>
+          </ul>
           <div className="home-discovery">
             <button type="button" onClick={() => onNavigate("features")}>
               Explore features <ChevronRight size={15} />

@@ -1,23 +1,22 @@
 import {
   ArrowRight,
-  BarChart3,
   Camera,
   ChevronRight,
   Clock3,
   Cloud,
   Dumbbell,
   Flame,
-  Lightbulb,
   LoaderCircle,
   MapPin,
   Play,
   RefreshCw,
+  Repeat,
   Sparkles,
   Target,
   Trophy,
 } from 'lucide-react';
+import WeeklyActivityCard from '../components/WeeklyActivityCard';
 import { getProgressSummary } from '../utils/storage';
-import { planActivity } from '../utils/planActivity';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -26,25 +25,20 @@ function greeting() {
   return 'Good evening';
 }
 
-function shortExerciseName(exercise) {
-  return exercise?.name?.replace('Bodyweight ', '').replace('Incline or knee ', '') || 'camera workout';
+function relativeDay(iso) {
+  const days = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(iso).setHours(0, 0, 0, 0)) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days} days ago`;
 }
 
-function weeklyActivity(sessions) {
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - (6 - index));
-    const count = sessions.filter((session) => {
-      const completed = new Date(session.completedAt);
-      return completed.toDateString() === date.toDateString();
-    }).length;
-    return {
-      date: date.toISOString(),
-      label: new Intl.DateTimeFormat('en', { weekday: 'short' }).format(date).slice(0, 1),
-      count,
-    };
-  });
+function InlineState({ children, error = false, onAction, actionLabel, actionIcon }) {
+  return (
+    <div className={`dashboard-inline-state${error ? ' error' : ''}`} role={error ? 'alert' : undefined}>
+      <span>{children}</span>
+      {onAction && <button type="button" onClick={onAction}>{actionIcon} {actionLabel}</button>}
+    </div>
+  );
 }
 
 export default function DashboardScreen({
@@ -64,136 +58,113 @@ export default function DashboardScreen({
   onCreatePlan,
 }) {
   const summary = getProgressSummary(sessions, sessionSummary);
-  const activity = weeklyActivity(sessions);
   const recent = sessions[0];
+  const stations = plan?.exercises?.filter((exercise) => !['warmup', 'cooldown'].includes(exercise.id)) || [];
 
   return (
-    <main className="dashboard-page">
-      <section className="dashboard-welcome">
+    <main className="dashboard-page" data-testid="dashboard-page">
+      <section className="dash-welcome">
         <div>
           <span className="eyebrow">Your dashboard</span>
-          <h1>{displayName ? greeting() + ', ' + displayName : 'Ready to move?'}</h1>
-          <p>Your plan, camera coach and progress are all here. Choose what fits today.</p>
+          <h1>{displayName ? `${greeting()}, ${displayName}` : 'Ready to move?'}</h1>
         </div>
-        <div className="dashboard-mode">
-          {persistenceMode === 'account' ? <Cloud size={17} /> : <MapPin size={17} />}
-          <span>{persistenceMode === 'account' ? 'Google account' : persistenceMode === 'demo' ? 'Temporary judge demo' : 'Saved on this device'}</span>
+        <div className="dash-mode" data-testid="dashboard-mode">
+          {persistenceMode === 'account' ? <Cloud size={15} /> : <MapPin size={15} />}
+          <span>{persistenceMode === 'account' ? 'Synced to your account' : persistenceMode === 'demo' ? 'Temporary judge demo' : 'Saved on this device'}</span>
         </div>
       </section>
 
-      <section className="dashboard-grid">
-        <article className="dashboard-today">
-          <div className="dashboard-today-copy">
-            <span className="status-pill dark"><Sparkles size={15} /> Today’s recommendation</span>
-            <h2>{planState === 'loading' ? 'Loading your personal plan' : planState === 'error' ? 'Your plan needs a retry' : plan ? plan.title : 'Build your first personal plan'}</h2>
+      <section className="dash-grid">
+        <article className="dash-today" data-testid="dashboard-today">
+          <div className="dash-today-copy">
+            <span className="status-pill dark"><Sparkles size={14} /> Today’s workout</span>
+            <h2>{planState === 'loading' ? 'Loading your plan' : planState === 'error' ? 'Your plan needs a retry' : plan ? plan.title : 'Build your first plan'}</h2>
             <p>{plan?.focus || 'Use your fitness profile to create a practical workout for your time, space and equipment.'}</p>
-            <div className="dashboard-today-actions">
+            {plan && planState === 'ready' && (
+              <ul className="dash-today-meta" aria-label="Plan summary">
+                <li><Clock3 size={15} /> {plan.totalMinutes} min</li>
+                <li><Dumbbell size={15} /> {stations.length} movements</li>
+                {plan.rounds > 1 && <li><Repeat size={15} /> {plan.rounds} rounds</li>}
+              </ul>
+            )}
+            <div className="dash-today-actions">
               {planState === 'loading' ? (
                 <button className="button button-primary" disabled><LoaderCircle className="spin" size={18} /> Loading plan…</button>
               ) : planState === 'error' ? (
                 <button className="button button-primary" onClick={onRetryPlan}><RefreshCw size={18} /> Retry plan</button>
               ) : plan ? (
                 <>
-                  <button className="button button-primary" onClick={() => onStartWorkout ? onStartWorkout(plan) : onNavigate('plan')}>
-                    <Play size={18} /> Start workout ({plan.totalMinutes} min)
+                  <button className="button button-primary" data-testid="dashboard-start-workout" onClick={() => onStartWorkout ? onStartWorkout(plan) : onNavigate('plan')}>
+                    <Play size={18} /> Start workout
                   </button>
-                  <button className="button button-on-dark" onClick={() => onNavigate('plan')}>
+                  <button className="button button-on-dark" data-testid="dashboard-view-plan" onClick={() => onNavigate('plan')}>
                     View plan <ArrowRight size={17} />
                   </button>
                 </>
               ) : (
-                <button className="button button-primary" onClick={onCreatePlan}><Sparkles size={18} /> Create my plan</button>
+                <button className="button button-primary" data-testid="dashboard-create-plan" onClick={onCreatePlan}><Sparkles size={18} /> Create my plan</button>
               )}
             </div>
           </div>
-          <div className="dashboard-pose" aria-hidden="true">
-            <svg viewBox="0 0 280 250">
-              <defs>
-                <linearGradient id="dash-line" x1="0" x2="1"><stop stopColor="#23e3c1" /><stop offset="1" stopColor="#3b82ff" /></linearGradient>
-              </defs>
-              <circle cx="140" cy="45" r="23" />
-              <path d="M140 69L140 132M140 85L92 118M140 85L188 118M140 132L103 201M140 132L177 201" />
-              <path className="pose-guide" d="M75 208H205M73 118H207" />
-              {[ [140,45], [140,86], [92,118], [188,118], [140,132], [103,201], [177,201] ].map(([x, y]) => <circle className="dash-pose-node" cx={x} cy={y} r="5" key={x + '-' + y} />)}
-            </svg>
-            <span><Camera size={15} /> Landmark-ready coaching</span>
-          </div>
+          {plan && planState === 'ready' && (
+            <ol className="dash-today-list" aria-label="Movements in today’s plan">
+              {plan.exercises.slice(0, 5).map((exercise, index) => (
+                <li key={exercise.id}>
+                  <i>{index + 1}</i>
+                  <span>{exercise.name}</span>
+                  {exercise.cameraSupported && <Camera size={14} aria-label="Camera supported" />}
+                </li>
+              ))}
+              {plan.exercises.length > 5 && <li className="is-more">+{plan.exercises.length - 5} more</li>}
+            </ol>
+          )}
         </article>
 
-        <article className="dashboard-progress panel">
-          <div className="dashboard-card-heading">
-            <div><span className="eyebrow">Activity overview</span><h2>Your momentum</h2></div>
-            <button type="button" onClick={() => onNavigate('progress')} aria-label="Open progress"><ChevronRight size={20} /></button>
-          </div>
-          {progressState === 'loading' ? (
-            <div className="dashboard-inline-state" role="status"><LoaderCircle className="spin" size={21} /> Loading your activity…</div>
-          ) : progressState === 'error' ? (
-            <div className="dashboard-inline-state error" role="alert"><span>Your activity could not load.</span><button onClick={onRetryProgress}><RefreshCw size={15} /> Try again</button></div>
-          ) : <><div className="mini-chart" aria-label={summary.weeklyActiveDays + ' active days this week'}>
-            {activity.map((day) => <div key={day.date}><i style={{ height: (18 + Math.min(day.count, 3) * 18) + 'px' }} className={day.count ? 'active' : ''} /><span>{day.label}</span></div>)}
-          </div>
-          <div className="dashboard-stats">
-            <span><strong>{summary.workouts}</strong> saved sessions</span>
-            <span><strong>{summary.reps}</strong> tracked reps</span>
-            <span><strong>{summary.streak}</strong> day streak</span>
-          </div><p className="field-help">Chart: last 7 days. Totals use {persistenceMode === 'account' ? 'your account history' : 'your saved sessions'}.</p></>}
-        </article>
+        {progressState === 'loading' ? (
+          <article className="panel dash-week-state" role="status"><LoaderCircle className="spin" size={21} /> Loading your activity…</article>
+        ) : progressState === 'error' ? (
+          <article className="panel dash-week-state">
+            <InlineState error onAction={onRetryProgress} actionLabel="Try again" actionIcon={<RefreshCw size={15} />}>Your activity could not load.</InlineState>
+          </article>
+        ) : (
+          <WeeklyActivityCard sessions={sessions} streak={summary.streak} onOpenProgress={() => onNavigate('progress')} />
+        )}
 
-        <article className="dashboard-plan panel">
-          <div className="dashboard-card-heading">
-            <div><span className="eyebrow">My plan</span><h2>{planState === 'loading' ? 'Loading your plan' : planState === 'error' ? 'Plan unavailable' : plan?.title || 'No plan yet'}</h2></div>
-            <Target size={22} />
+        <article className="dash-recent panel" data-testid="dashboard-recent">
+          <div className="dash-card-heading">
+            <span className="eyebrow">Last session</span>
+            <h2>{progressState === 'loading' ? 'Loading…' : progressState === 'error' ? 'Unavailable' : recent ? (recent.exerciseName || recent.exerciseId) : 'No workouts yet'}</h2>
           </div>
-          {planState === 'loading' ? (
-            <div className="dashboard-inline-state"><LoaderCircle className="spin" size={21} /> Loading your saved plan…</div>
-          ) : planState === 'error' ? (
-            <div className="dashboard-inline-state error"><span>Plan sync is temporarily unavailable.</span><button onClick={onRetryPlan}><RefreshCw size={15} /> Try again</button></div>
-          ) : plan ? (
+          {recent && progressState === 'ready' ? (
             <>
-              <p>{plan.exercises.length} movements · {plan.totalMinutes} minutes</p>
-              <div className="plan-mini-list">
-                {plan.exercises.slice(0, 4).map((exercise, index) => <span key={exercise.id}><i>{index + 1}</i>{exercise.name}</span>)}
-              </div>
-              <p className="field-help">{plan.reasons.find((reason) => reason.includes('space:'))}</p>
+              <p className="dash-recent-when">{relativeDay(recent.completedAt)}{recent.source === 'self-guided' ? ' · Self-guided' : ''}</p>
+              <ul className="dash-recent-stats">
+                <li><Clock3 size={16} /> {Math.max(1, Math.round(recent.durationSeconds / 60))} min</li>
+                {recent.source !== 'self-guided' && <li><Dumbbell size={16} /> {recent.reps} reps</li>}
+                <li><Flame size={16} /> {Number(recent.calories || 0).toFixed(0)} kcal est.</li>
+              </ul>
             </>
-          ) : (
-            <div className="dashboard-inline-state"><span>Your profile is ready. Create a plan whenever you want.</span><button onClick={onCreatePlan}><Sparkles size={15} /> Create plan</button></div>
-          )}
+          ) : progressState === 'ready' ? (
+            <p className="dash-recent-when">Finish a workout and it will show up here.</p>
+          ) : null}
+          <button className="text-button" type="button" onClick={() => onStartCoach('squats')} data-testid="dashboard-open-coach">
+            Open Camera Coach <ArrowRight size={16} />
+          </button>
         </article>
 
-        <article className="dashboard-actions panel">
+        <article className="dash-actions panel" data-testid="dashboard-quick-start">
           <span className="eyebrow">Quick start</span>
-          <h2>Move your way</h2>
-          <button onClick={() => onNavigate('workouts')}><Dumbbell size={20} /><span><strong>Explore workouts</strong><small>See every supported movement</small></span><ChevronRight size={18} /></button>
-          <button onClick={() => onNavigate('leaderboard')}><Trophy size={20} /><span><strong>Leaderboard</strong><small>Consistency, with privacy</small></span><ChevronRight size={18} /></button>
+          <button type="button" onClick={() => onStartCoach('squats')}><Camera size={19} /><span><strong>Camera Coach</strong><small>Rep counting and form cues</small></span><ChevronRight size={17} /></button>
+          <button type="button" onClick={() => onNavigate('workouts')}><Dumbbell size={19} /><span><strong>Workout library</strong><small>Every supported movement</small></span><ChevronRight size={17} /></button>
+          <button type="button" onClick={() => onNavigate('leaderboard')}><Trophy size={19} /><span><strong>Campus leaderboard</strong><small>Consistency, with privacy</small></span><ChevronRight size={17} /></button>
         </article>
 
-        <article className="dashboard-recent panel">
-          <div className="dashboard-card-heading">
-            <div><span className="eyebrow">Recent activity</span><h2>{progressState === 'loading' ? 'Loading activity' : progressState === 'error' ? 'Activity unavailable' : recent ? recent.exerciseName || recent.exerciseId : 'No workouts yet'}</h2></div>
-            <BarChart3 size={22} />
-          </div>
-          {progressState === 'loading' ? <p>Checking your saved sessions…</p> : progressState === 'error' ? <p>Retry your progress to see your latest workout.</p> : recent ? (
-            <div className="recent-session">
-              <span><Clock3 size={17} /> {Math.max(1, Math.round(recent.durationSeconds / 60))} minutes</span>
-              <span><Dumbbell size={17} /> {recent.source === 'self-guided' ? 'Self-guided' : `${recent.reps} reps`}</span>
-              <span><Flame size={17} /> {Number(recent.calories || 0).toFixed(1)} kcal estimate</span>
-            </div>
-          ) : (
-            <p>Finish your first workout session when you’re ready. Your history will appear here.</p>
-          )}
-          <button className="text-button" onClick={() => onNavigate('progress')}>View progress <ArrowRight size={16} /></button>
-        </article>
-
-        <article className="dashboard-tip">
-          <Lightbulb size={24} />
-          <div><span className="eyebrow light">Coach tip</span><h2>Make the camera work for you</h2><p>Keep your full body visible, use even light and leave a little space around you.</p></div>
-        </article>
-
-        <article className="dashboard-goal panel">
-          <div><Target size={20} /><span>Current goal</span><strong>{profile.goal}</strong></div>
-          <div><Clock3 size={20} /><span>Session length</span><strong>{profile.time} minutes</strong></div>
-          <button type="button" onClick={() => onNavigate('profile')}>Edit fitness profile</button>
+        <article className="dash-profile panel" data-testid="dashboard-profile">
+          <div><Target size={17} /><span>Goal</span><strong>{profile.goal}</strong></div>
+          <div><Clock3 size={17} /><span>Session</span><strong>{profile.time} min</strong></div>
+          <div><MapPin size={17} /><span>Space</span><strong>{profile.location}</strong></div>
+          <button type="button" onClick={() => onNavigate('profile')}>Edit profile <ArrowRight size={14} /></button>
+          <p className="dash-tip"><Camera size={15} /> Camera tip: keep your full body in frame, in even light, with a little space around you.</p>
         </article>
       </section>
     </main>
