@@ -1,5 +1,16 @@
 # BITS in Motion — Current Project State
 
+## Homepage visual refinement — release in progress
+
+- The homepage hero has been rebuilt around a clearer `Move smarter. Train anywhere.` message, two prioritized conversion actions, compact proof points, and lower-emphasis Features/How It Works links. The previous four-button stack and awkward headline wrapping were removed.
+- The Camera Coach illustration is now a larger motion-analysis stage with a dimensional athlete, tracked joints, perspective floor, scan line, knee angle, live form score, phase progress, rep count, coaching cue, and an interactive `Try it live` action. The same standing/descending/depth/ascending/complete sequence and reduced-motion behavior remain intact.
+- A tester-visible stray cyan outline was traced to the application intentionally focusing the route heading while leaving the browser's default focus ring on the non-interactive `<h1>`. The homepage route focus target now suppresses that ring; interactive controls retain their normal visible focus styles. A browser assertion covers this regression.
+- Student-benefit cards now include lightweight room-space, recommendation-input, and supported-coach diagrams instead of text-only empty space.
+- Responsive behavior was rebalanced at 390, 768, 820, 1024, and 1440 pixels. A dedicated 844×390 landscape composition keeps the headline, both main actions, and the coach visualization visible together instead of pushing every action below the first viewport. The homepage is now included in automated landscape screenshot/overflow coverage.
+- Files changed: `src/screens/WelcomeScreen.jsx`, `src/styles/global.css`, and `scripts/verify-browser.mjs`.
+- Verification: `npm test` passed 15 suites / 830 tests; `npm run build` passed; `node scripts/verify-browser.mjs` passed all 22 high-level flows with no JavaScript errors, unexpected network failures, or horizontal overflow; `git diff --check` passed.
+- The user authorized immediate deployment on 23 September 2026. Release uses the existing unprotected `feature/google-auth-user-database` production branch and its Vercel integration. Deployment verification is pending; no database changes are required.
+
 ## Live release
 
 - **Authoritative branch:** `feature/google-auth-user-database`.
@@ -51,4 +62,4 @@
 
 ## Safe continuation point
 
-The release is complete. The next safe action is post-release physical-device QA for crunches, push-ups, squats, and jumping jacks across representative phones, camera heights, body types, and lighting conditions. Catalogue expansion for dumbbells or resistance bands should add verified exercise data before recommendations attempt to use that equipment.
+Complete the authorized homepage deployment and verify the production homepage and API. Physical-device QA for crunches, push-ups, squats, and jumping jacks remains the next camera-quality activity. Catalogue expansion for dumbbells or resistance bands should add verified exercise data before recommendations attempt to use that equipment.

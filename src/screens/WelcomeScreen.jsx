@@ -2,21 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Activity,
   ArrowRight,
-  BarChart3,
   Camera,
   CheckCircle2,
   ChevronRight,
   Dumbbell,
-  FileText,
-  Play,
-  RotateCcw,
   ScanLine,
-  Shield,
   ShieldCheck,
   Sparkles,
-  Trophy,
   UserRound,
-  Users,
   Zap,
 } from 'lucide-react';
 import GoogleSignInButton from '../components/GoogleSignInButton';
@@ -45,7 +38,7 @@ const SQUAT_PHASES = [
   },
 ];
 
-function CameraCoachPreview() {
+function CameraCoachPreview({ onTryCoach }) {
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(() => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -73,25 +66,31 @@ function CameraCoachPreview() {
   const torsoPath = `M${p[3][0]} ${p[3][1]}Q${p[2][0]} ${p[2][1] - 8} ${p[4][0]} ${p[4][1]}L${p[11][0]} ${p[11][1]}Q${p[9][0]} ${p[9][1] + 8} ${p[10][0]} ${p[10][1]}Z`;
 
   return (
-    <div className="product-visual" aria-label="Animated illustration of Camera Coach tracking a complete squat">
-      <span className="product-preview-label">Camera Coach · illustrative preview</span>
+    <div className="product-visual">
+      <span className="visual-orbit visual-orbit-one" aria-hidden="true" />
+      <span className="visual-orbit visual-orbit-two" aria-hidden="true" />
 
-      <article className="visual-camera-card">
-        {/* Top Camera Bar */}
+      <article className="visual-camera-card" aria-label="Animated Camera Coach illustration tracking a complete squat">
         <div className="visual-card-top">
-          <span className="camera-live-tag">
-            <i className="camera-live-dot" /> On-Device Vision
-          </span>
-          <strong className="camera-exercise-tag">Squat coach • Knee angle</strong>
+          <div className="camera-live-tag">
+            <i className="camera-live-dot" /> Live motion intelligence
+          </div>
+          <span className="camera-privacy-tag"><ShieldCheck size={13} /> Processed on your device</span>
         </div>
 
-        {/* Viewfinder with Pose Landmarks */}
         <div className="visual-viewfinder">
+          <div className="motion-grid" aria-hidden="true" />
+          <div className="motion-halo" aria-hidden="true" />
           <div className="viewfinder-scanline" aria-hidden="true" />
           <span className="viewfinder-bracket top-left" aria-hidden="true" />
           <span className="viewfinder-bracket top-right" aria-hidden="true" />
           <span className="viewfinder-bracket bottom-left" aria-hidden="true" />
           <span className="viewfinder-bracket bottom-right" aria-hidden="true" />
+
+          <div className="motion-stage-copy">
+            <small>AI form coach</small>
+            <strong>Squat analysis</strong>
+          </div>
 
           <svg
             viewBox="0 0 340 310"
@@ -109,80 +108,77 @@ function CameraCoachPreview() {
                 <stop offset="100%" stopColor="#ff9f43" />
               </linearGradient>
               <radialGradient id="athlete-head" cx="35%" cy="28%" r="75%">
-                <stop offset="0%" stopColor="#2d5678" />
-                <stop offset="100%" stopColor="#102940" />
+                <stop offset="0%" stopColor="#4d8bc1" />
+                <stop offset="100%" stopColor="#142b4a" />
               </radialGradient>
+              <linearGradient id="athlete-core" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#245b85" />
+                <stop offset="100%" stopColor="#0b203d" />
+              </linearGradient>
+              <filter id="pose-glow" x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="5" result="blur" />
+                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+              </filter>
             </defs>
 
-            {/* Stylized Body Geometry */}
+            <ellipse className="pose-floor-shadow" cx="170" cy="286" rx="92" ry="13" />
+            <ellipse className="pose-floor-ring" cx="170" cy="280" rx="118" ry="26" />
             <circle className="pose-body-fill" cx={p[0][0]} cy={p[0][1]} r="25" />
             <path className="pose-body-torso" d={torsoPath} />
             <path className="pose-body-limbs" d={limbPath} />
 
-            {/* MediaPipe Skeletal Landmark Connections */}
-            <path
-              className="pose-skeleton-line"
-              d={skeletonPath}
-            />
+            <path className="pose-skeleton-line" d={skeletonPath} />
 
-            {/* Knee Angle Biomechanical Measurement Indicator */}
             <path
               className="pose-angle-arc"
               d={`M${p[12][0] - 15} ${p[12][1] - 17} A 28 28 0 0 1 ${p[12][0] + 8} ${p[12][1] + 20}`}
             />
             <text x={p[12][0] - 7} y={p[12][1] + 3} className="pose-angle-label">{phase.angle}°</text>
 
-            {/* 33 Key Joint Landmark Nodes */}
             {p.map(([x, y], index) => (
               <circle className="pose-node-circle" cx={x} cy={y} r={index === 0 ? 4 : 5.5} key={index} />
             ))}
           </svg>
 
-          {/* Real-time Angle & Stage Badge */}
           <div className="viewfinder-hud-metric">
-            <span>Measurement</span>
-            <strong>{phase.angle}° <small>knee angle</small></strong>
+            <span>Live angle</span>
+            <strong>{phase.angle}°</strong>
+            <small>Knee flexion</small>
+          </div>
+
+          <div className="viewfinder-form-score">
+            <span>Form score</span>
+            <strong>{phase.key === 'depth' ? 94 : phase.key === 'complete' ? 97 : 89}<small>/100</small></strong>
+          </div>
+
+          <div className="motion-phase-track" aria-hidden="true">
+            {SQUAT_PHASES.map((item, index) => (
+              <i className={index <= phaseIndex ? 'active' : ''} key={item.key} />
+            ))}
           </div>
         </div>
 
-        {/* Live HUD Feedback & Reps */}
-        <div className="visual-hud-overlay">
-          <div className="hud-feedback-pill">
-            <CheckCircle2 size={16} className="text-teal" />
-            <span>{phase.cue}</span>
+        <div className="coach-command-bar">
+          <div className="coach-live-cue">
+            <CheckCircle2 size={18} />
+            <span><small>Coach cue</small><strong>{phase.cue}</strong></span>
           </div>
-
-          <div className="hud-reps-card">
-            <div>
-              <span className="hud-label">Example reps</span>
-              <strong>{phase.rep} <small>/ 15</small></strong>
-            </div>
-            <div className="hud-progress-bar">
-              <i style={{ width: `${Math.round(phase.rep / 15 * 100)}%` }} />
-            </div>
-            <em>Stage: {phase.label}</em>
+          <div className="coach-rep-count">
+            <span>REP</span>
+            <strong>{String(phase.rep).padStart(2, '0')}</strong>
+            <small>/ 15</small>
           </div>
+          <button type="button" className="visual-launch-coach" onClick={onTryCoach}>
+            <Camera size={16} /> Try it live <ArrowRight size={15} />
+          </button>
         </div>
 
-        {/* Pipeline Diagram Ribbon */}
-        <div className="visual-pipeline-ribbon">
-          <div className="pipeline-step">
-            <Camera size={13} />
-            <span>1. Local Camera</span>
-          </div>
-          <span className="pipeline-arrow">➔</span>
-          <div className="pipeline-step">
-            <ScanLine size={13} />
-            <span>2. 33 Landmarks</span>
-          </div>
-          <span className="pipeline-arrow">➔</span>
-          <div className="pipeline-step">
-            <Activity size={13} />
-            <span>3. Real-time Cues</span>
-          </div>
+        <div className="visual-signal-strip" aria-hidden="true">
+          <span><Camera size={12} /> Camera</span><i />
+          <span><ScanLine size={12} /> 33 points</span><i />
+          <span><Activity size={12} /> Live cue</span>
         </div>
       </article>
-
     </div>
   );
 }
@@ -268,12 +264,18 @@ export default function WelcomeScreen({
         <div className="marketing-hero-grid">
           <div className="marketing-copy">
             <span className="status-pill dark">
-              <Sparkles size={15} /> Built for Hostel & Student Spaces
+              <Sparkles size={15} /> AI fitness, built for student life
             </span>
-            <h1>Your hostel-friendly fitness <em>companion</em></h1>
+            <h1><span>Move smarter.</span><span className="hero-title-accent">Train anywhere.</span></h1>
             <p>
-              Build a practical workout plan for limited student spaces, then use privacy-first camera coaching for real-time rep counting and observable pose feedback.
+              Personal plans for hostel rooms, PGs and home—with an on-device coach that sees your movement, counts reps and gives clear form cues in real time.
             </p>
+
+            <div className="hero-proof-row" aria-label="Product highlights">
+              <span><CheckCircle2 size={15} /> 10–60 min plans</span>
+              <span><CheckCircle2 size={15} /> Zero gym required</span>
+              <span><ShieldCheck size={15} /> Camera stays local</span>
+            </div>
 
             <div className="marketing-actions">
               <button
@@ -290,15 +292,18 @@ export default function WelcomeScreen({
               >
                 <Camera size={19} /> Live Camera Coach
               </button>
+            </div>
+
+            <div className="marketing-text-links">
               <button
-                className="button button-on-dark button-large"
+                className="marketing-text-link"
                 type="button"
                 onClick={() => onNavigate('features')}
               >
-                <Sparkles size={18} /> Explore features
+                <Sparkles size={16} /> Explore features <ChevronRight size={15} />
               </button>
               <button
-                className="button button-quiet-dark"
+                className="marketing-text-link"
                 type="button"
                 onClick={() => onNavigate('how-it-works')}
               >
@@ -391,16 +396,31 @@ export default function WelcomeScreen({
             <div className="benefit-icon blue"><Dumbbell size={25} /></div>
             <h3>Built for real student spaces</h3>
             <p>Short sessions, minimal equipment, and practical movements designed for hostel rooms, PGs, and apartments.</p>
+            <div className="benefit-graphic room-graphic" aria-hidden="true">
+              <span className="room-mat" />
+              <span className="room-bag" />
+              <span className="room-zone">2m × 2m</span>
+            </div>
           </article>
           <article>
             <div className="benefit-icon teal"><Sparkles size={25} /></div>
             <h3>Explainable recommendations</h3>
             <p>Transparent rules use your goal, available time, experience, location, and equipment—never a mysterious black box.</p>
+            <div className="benefit-graphic recommendation-graphic" aria-hidden="true">
+              <span>Goal</span><i /><span>Time</span><i /><span>Space</span>
+              <strong>YOUR PLAN</strong>
+            </div>
           </article>
           <article>
             <div className="benefit-icon violet"><ScanLine size={25} /></div>
             <h3>Four live movement coaches</h3>
             <p>MediaPipe landmarks support squats, push-ups, crunches, and jumping jacks with automated rep counting and form cues.</p>
+            <div className="benefit-graphic coach-graphic" aria-hidden="true">
+              <span><i /> SQUAT <strong>LIVE</strong></span>
+              <span><i /> PUSH-UP <strong>LIVE</strong></span>
+              <span><i /> CRUNCH <strong>LIVE</strong></span>
+              <span><i /> JACK <strong>LIVE</strong></span>
+            </div>
           </article>
         </div>
         <div className="section-footer-action">

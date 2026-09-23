@@ -395,10 +395,12 @@ try {
   await record('One Google/Guest choice and public leaderboard navigation', async () => {
     assert.equal(await evaluate('Boolean(document.querySelector(".nav-signin-button"))'), true);
     assert.equal(await evaluate('Boolean(document.querySelector(".auth-choice-expanded"))'), false);
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".marketing-copy h1")).outlineStyle'), 'none');
+    assert.equal(await evaluate('Boolean(document.querySelector(".visual-launch-coach"))'), true);
     await click('Set up my fitness journey');
     await ready(() => evaluate('[...document.querySelectorAll("button")].some(el => el.textContent === "Continue with Google")'));
     assert.equal(await evaluate('[...document.querySelectorAll("button")].filter(el => el.textContent.trim() === "Continue as Guest").length'), 1);
-    await reviewWidths('home');
+    await reviewWidths('home', true);
     await click('Leaderboard', '.marketing-nav button');
     await route('leaderboard');
     assert((await body()).includes('Sample leaderboard preview'));
