@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateWorkoutPlan } from './workoutRecommendation';
 import { recommendWorkout, normalizePreferences, isEligible, calculateWorkoutDuration } from '../../shared/recommendation.js';
-import { PROFILE_OPTIONS } from '../../shared/profile.js';
+import { PROFILE_OPTIONS, profileErrors } from '../../shared/profile.js';
 import { EXERCISES } from '../data/exercises.js';
 import { buildWorkoutSequence } from '../App.jsx';
 
@@ -213,5 +213,198 @@ describe('recommendation eligibility and exact time budgets', () => {
         expect(exercise.rounds * exercise.setsPerRound * (exercise.workSeconds + exercise.restSeconds)).toBe(exercise.estimatedSeconds);
       }
     }
+  });
+});
+
+describe('Comprehensive Product Logic & Recommendation Test Matrix', () => {
+  const durations = [10, 20, 30, 45, 60];
+
+  describe('Combination 1: Beginner + PG Room + None', () => {
+    it.each(durations)('verifies exact executable duration, compact movements, and zero jumping/lunging for %i minutes', (time) => {
+      for (const goal of ['Stay fit', 'Build strength', 'Support weight management']) {
+        const plan = generateWorkoutPlan({ level: 'Beginner', location: 'PG Room', equipment: 'None', time, goal, lowImpact: false });
+        expect(calculateWorkoutDuration(plan)).toBe(time * 60);
+        expect(plan.totalMinutes).toBe(time);
+        const sequence = buildWorkoutSequence(plan);
+        const warmup = sequence.find((s) => s.id === 'warmup');
+        const cooldown = sequence.find((s) => s.id === 'cooldown');
+        const stations = sequence.filter((s) => !['warmup', 'cooldown'].includes(s.id));
+        const rounds = plan.rounds || 1;
+        const roundBreakSec = (rounds > 1 ? rounds - 1 : 0) * (plan.roundBreakSeconds || 60);
+        const seqSec = warmup.estimatedSeconds + stations.reduce((acc, s) => acc + s.estimatedSeconds, 0) + roundBreakSec + cooldown.estimatedSeconds;
+        expect(seqSec).toBe(time * 60);
+
+        expect(plan.exercises.every((e) => e.equipment === 'None')).toBe(true);
+
+        const planIds = plan.exercises.map((e) => e.id);
+        expect(planIds).not.toContain('jumping-jacks');
+        expect(planIds).not.toContain('lunges');
+        expect(plan.reasons.some((r) => r.includes('PG Room'))).toBe(true);
+        expect(plan.reasons.some((r) => r.includes('space:'))).toBe(true);
+
+        expect(planIds).not.toContain('rows');
+        expect(planIds).not.toContain('lunges');
+        for (const station of plan.exercises.filter((e) => !['warmup', 'cooldown'].includes(e.id))) {
+          expect(station.minLevel).toBe('Beginner');
+        }
+
+        expect(plan.exercises[0].id).toBe('warmup');
+        expect(plan.exercises.at(-1).id).toBe('cooldown');
+      }
+    });
+  });
+
+  describe('Combination 2: Beginner + Hostel + Resistance Band', () => {
+    it.each(durations)('falls back safely to supported bodyweight with explicit note for %i minutes', (time) => {
+      for (const goal of ['Stay fit', 'Build strength', 'Support weight management']) {
+        const plan = generateWorkoutPlan({ level: 'Beginner', location: 'Hostel', equipment: 'Resistance Band', time, goal, lowImpact: false });
+        expect(calculateWorkoutDuration(plan)).toBe(time * 60);
+        expect(plan.exercises.every((e) => e.equipment === 'None')).toBe(true);
+        expect(plan.reasons.some((r) => r.includes('Resistance Band movements are not in the current catalogue yet'))).toBe(true);
+        const planIds = plan.exercises.map((e) => e.id);
+        expect(planIds).not.toContain('jumping-jacks');
+        expect(planIds).not.toContain('lunges');
+        expect(plan.reasons.some((r) => r.includes('Hostel'))).toBe(true);
+        expect(plan.reasons.some((r) => r.includes('space:'))).toBe(true);
+      }
+    });
+  });
+
+  describe('Combination 3: Intermediate + Home + Dumbbell', () => {
+    it.each(durations)('allows wider movements, falls back to bodyweight with note for %i minutes', (time) => {
+      for (const goal of ['Stay fit', 'Build strength', 'Support weight management']) {
+        const plan = generateWorkoutPlan({ level: 'Intermediate', location: 'Home', equipment: 'Dumbbell', time, goal, lowImpact: false });
+        expect(calculateWorkoutDuration(plan)).toBe(time * 60);
+        expect(plan.exercises.every((e) => e.equipment === 'None')).toBe(true);
+        expect(plan.reasons.some((r) => r.includes('Dumbbell movements are not in the current catalogue yet'))).toBe(true);
+        expect(plan.reasons.some((r) => r.includes('Home space: wider movements are eligible'))).toBe(true);
+        expect(plan.reasons.some((r) => r.includes('space:'))).toBe(true);
+        if (time >= 30 && goal !== 'Stay fit') {
+          const planIds = plan.exercises.map((e) => e.id);
+          expect(planIds).toContain('lunges');
+        }
+        if (goal === 'Stay fit') {
+          const planIds = plan.exercises.map((e) => e.id);
+          expect(planIds).toContain('jumping-jacks');
+        }
+      }
+    });
+  });
+
+  describe('Combination 4: Beginner + Home + Backpack', () => {
+    it.each(durations)('does NOT assign rows to Beginner even with Backpack for %i minutes', (time) => {
+      for (const goal of ['Stay fit', 'Build strength', 'Support weight management']) {
+        const plan = generateWorkoutPlan({ level: 'Beginner', location: 'Home', equipment: 'Backpack', time, goal, lowImpact: false });
+        expect(calculateWorkoutDuration(plan)).toBe(time * 60);
+        const planIds = plan.exercises.map((e) => e.id);
+        expect(planIds).not.toContain('rows');
+        expect(plan.reasons).toContain('Bodyweight fits this goal and level; backpack not needed');
+      }
+    });
+
+    it('assigns rows to Intermediate with Backpack when goal and time permit', () => {
+      const plan = generateWorkoutPlan({ level: 'Intermediate', location: 'Home', equipment: 'Backpack', time: 30, goal: 'Build strength', lowImpact: false });
+      expect(plan.exercises.map((e) => e.id)).toContain('rows');
+      expect(plan.reasons).toContain('uses Backpack');
+    });
+  });
+
+  describe('Goal logic: Weight Management vs Stay Fit', () => {
+    it.each(durations)('emphasizes conditioning and cardio for Weight Management at %i minutes', (time) => {
+      const plan = generateWorkoutPlan({ level: 'Beginner', location: 'Home', equipment: 'None', time, goal: 'Support weight management', lowImpact: false });
+      expect(plan.focus).toContain('Conditioning emphasis');
+      expect(plan.exercises[1].id).toBe('jumping-jacks');
+      for (const station of plan.exercises.filter((e) => !['warmup', 'cooldown'].includes(e.id))) {
+        expect(station.goalTags).toContain('weight-management');
+      }
+      expect(calculateWorkoutDuration(plan)).toBe(time * 60);
+    });
+
+    it.each(durations)('maintains balanced full-body composition for Stay Fit at %i minutes', (time) => {
+      const plan = generateWorkoutPlan({ level: 'Beginner', location: 'Home', equipment: 'None', time, goal: 'Stay fit', lowImpact: false });
+      expect(plan.focus).toContain('balanced mix');
+      for (const station of plan.exercises.filter((e) => !['warmup', 'cooldown'].includes(e.id))) {
+        expect(station.goalTags).toContain('stay-fit');
+      }
+      expect(calculateWorkoutDuration(plan)).toBe(time * 60);
+    });
+  });
+
+  describe('Impact preference: Low-impact vs Normal-impact', () => {
+    it('guarantees 100% low impact across all combinations when lowImpact is true', () => {
+      for (const location of ['PG Room', 'Hostel', 'Home']) {
+        for (const level of ['Beginner', 'Intermediate']) {
+          for (const goal of ['Stay fit', 'Build strength', 'Support weight management']) {
+            for (const time of [10, 20, 30, 45, 60]) {
+              const plan = generateWorkoutPlan({ level, location, equipment: 'None', time, goal, lowImpact: true });
+              expect(plan.exercises.every((e) => e.impact === 'low')).toBe(true);
+              const planIds = plan.exercises.map((e) => e.id);
+              expect(planIds).not.toContain('jumping-jacks');
+              expect(planIds).not.toContain('lunges');
+              expect(plan.reasons).toContain('low-impact movements preferred');
+            }
+          }
+        }
+      }
+    });
+  });
+
+  describe('Legacy data compatibility & normalization', () => {
+    it.each([
+      'None / Bodyweight',
+      'Bodyweight',
+      'bodyweight',
+      'none',
+      'None',
+      'Resistance band',
+      'Dumbbells',
+      'dumbbell',
+      'backpack',
+    ])('accepts legacy equipment %s without validation errors', (equipment) => {
+      const errors = profileErrors({
+        displayName: 'Student',
+        age: '20',
+        height: '170',
+        weight: '65',
+        level: 'Beginner',
+        goal: 'Stay fit',
+        time: '20',
+        location: 'Hostel',
+        equipment,
+      });
+      expect(errors).toEqual({});
+      const plan = generateWorkoutPlan({ level: 'Beginner', location: 'Hostel', equipment, time: 20, goal: 'Stay fit' });
+      expect(calculateWorkoutDuration(plan)).toBe(1200);
+    });
+
+    it.each([
+      'Hostel room',
+      'PG room',
+      'Open indoor space',
+      'Open space / Gym',
+      'Campus',
+      'Outdoor',
+      'Gym',
+      'Park / outdoor ground',
+      'Campus gym',
+      'Dorm',
+      'Dorm room',
+      'Bedroom',
+    ])('accepts legacy location %s without validation errors', (location) => {
+      const errors = profileErrors({
+        displayName: 'Student',
+        age: '20',
+        height: '170',
+        weight: '65',
+        level: 'Beginner',
+        goal: 'Stay fit',
+        time: '20',
+        location,
+        equipment: 'None',
+      });
+      expect(errors).toEqual({});
+      const plan = generateWorkoutPlan({ level: 'Beginner', location, equipment: 'None', time: 20, goal: 'Stay fit' });
+      expect(calculateWorkoutDuration(plan)).toBe(1200);
+    });
   });
 });

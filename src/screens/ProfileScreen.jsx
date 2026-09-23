@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Info, Ruler, Save, Scale, ShieldCheck, Target, Trophy, UserRound } from 'lucide-react';
 import ScreenHeader from '../components/ScreenHeader';
 import { calculateBmi, getBmiLabel } from '../utils/bmi';
-import { EQUIPMENT_LABELS, PROFILE_OPTIONS as OPTIONS, LOCATION_LABELS, LEGACY_EQUIPMENT, profileErrors as validate } from '../../shared/profile.js';
+import { EQUIPMENT_LABELS, PROFILE_OPTIONS as OPTIONS, LOCATION_LABELS, UNSUPPORTED_EQUIPMENT, profileErrors as validate } from '../../shared/profile.js';
 
 
 const STEPS = [
@@ -185,7 +185,7 @@ export default function ProfileScreen({ initialProfile, signedIn, demoMode, acco
               <ChoiceTiles label="Workout setting" name="location" value={profile.location} onChange={handleChange} options={OPTIONS.location} error={errors.location} />
               <ChoiceTiles label="Available equipment" name="equipment" value={profile.equipment} onChange={handleChange} options={OPTIONS.equipment} error={errors.equipment} />
               <p className="field-help">No GPS or address is collected. Home can include wider movements; PG Room and Hostel plans stay compact. Backpack rows are used only when your level and goal make them appropriate.</p>
-              {([...LEGACY_EQUIPMENT, 'Dumbbell', 'Resistance Band'].includes(profile.equipment)) && <p className="catalogue-note" role="status"><Info size={15} /> Your {String(profile.equipment).toLowerCase()} preference is saved. The current verified catalogue does not yet include a matching movement, so this plan safely uses supported bodyweight exercises.</p>}
+              {(UNSUPPORTED_EQUIPMENT.includes(profile.equipment)) && <p className="catalogue-note" role="status"><Info size={15} /> Your {String(profile.equipment).toLowerCase()} preference is saved. The current verified catalogue does not yet include a matching movement, so this plan safely uses supported bodyweight exercises.</p>}
               <div className="preference-stack">
                 <label className="toggle-row"><input type="checkbox" name="lowImpact" checked={Boolean(profile.lowImpact)} onChange={handleChange} /><span><strong>Prefer low-impact movements</strong><small>Excludes jumping and moderate-impact movements. This is not a medical safety assessment.</small></span></label>
                 <label className={'toggle-row ' + (!signedIn ? 'disabled' : '')}><input type="checkbox" name="leaderboardOptIn" checked={Boolean(profile.leaderboardOptIn)} onChange={handleChange} disabled={!signedIn} /><span><strong>Join the community leaderboard</strong><small>Optional. Only your chosen alias and workout totals are shown.</small></span></label>

@@ -47,8 +47,31 @@ export const LEGACY_LOCATIONS = [
   'Gym',
   'Park / outdoor ground',
   'Campus gym',
+  'Dorm',
+  'Dorm room',
+  'Bedroom',
 ];
-export const LEGACY_EQUIPMENT = ['Resistance band', 'Dumbbells'];
+export const LEGACY_EQUIPMENT = [
+  'None / Bodyweight',
+  'Bodyweight',
+  'bodyweight',
+  'none',
+  'Resistance band',
+  'resistance band',
+  'Dumbbells',
+  'dumbbells',
+  'dumbbell',
+  'backpack',
+];
+export const UNSUPPORTED_EQUIPMENT = [
+  'Dumbbell',
+  'Resistance Band',
+  'Resistance band',
+  'resistance band',
+  'Dumbbells',
+  'dumbbells',
+  'dumbbell',
+];
 export const LOCATION_LABELS = {
   'PG Room': 'PG Room',
   Hostel: 'Hostel',
@@ -62,16 +85,64 @@ export const LOCATION_LABELS = {
   Outdoor: 'Outdoor (open space)',
   'Park / outdoor ground': 'Outdoor / Park (open space)',
   Gym: 'Gym (open space)',
+  Dorm: 'Hostel / Dorm (compact space)',
+  'Dorm room': 'Hostel / Dorm room (compact space)',
+  Bedroom: 'Room (compact space)',
 };
 
 export const EQUIPMENT_LABELS = {
   None: 'None / Bodyweight',
+  'None / Bodyweight': 'None / Bodyweight',
+  Bodyweight: 'None / Bodyweight',
+  bodyweight: 'None / Bodyweight',
+  none: 'None / Bodyweight',
   Dumbbell: 'Dumbbell',
+  dumbbell: 'Dumbbell',
   'Resistance Band': 'Resistance Band',
-  Backpack: 'Backpack',
   'Resistance band': 'Resistance Band (previous selection)',
+  'resistance band': 'Resistance Band (previous selection)',
+  Backpack: 'Backpack',
+  backpack: 'Backpack',
   Dumbbells: 'Dumbbells (previous selection)',
+  dumbbells: 'Dumbbells (previous selection)',
 };
+
+export function normalizeEquipment(value) {
+  const val = String(value || '').trim().toLowerCase();
+  if (!val || val === 'none' || val === 'bodyweight' || val.includes('bodyweight') || val.includes('none')) {
+    return 'None';
+  }
+  if (val.includes('backpack')) {
+    return 'Backpack';
+  }
+  if (val.includes('dumbbell')) {
+    return 'Dumbbell';
+  }
+  if (val.includes('band')) {
+    return 'Resistance Band';
+  }
+  return 'None';
+}
+
+export function normalizeLocation(location) {
+  const loc = String(location || '').trim().toLowerCase();
+  if (!loc) return 'Hostel';
+  if (loc.includes('pg')) return 'PG Room';
+  if (loc.includes('hostel') || loc.includes('dorm') || loc.includes('bedroom')) return 'Hostel';
+  if (loc === 'home') return 'Home';
+  if (
+    loc.includes('open') ||
+    loc.includes('gym') ||
+    loc.includes('campus') ||
+    loc.includes('outdoor') ||
+    loc.includes('park') ||
+    loc.includes('ground') ||
+    loc.includes('yard')
+  ) {
+    return 'Home';
+  }
+  return 'Hostel';
+}
 
 export function profileErrors(profile = {}) {
   const errors = {};
