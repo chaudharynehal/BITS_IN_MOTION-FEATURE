@@ -14,6 +14,20 @@ export function calculateAngle(pointA, vertex, pointC) {
   return Math.round(toDegrees(Math.acos(Math.min(1, Math.max(-1, cosine)))) * 10) / 10;
 }
 
+export function calculateAngle3D(pointA, vertex, pointC) {
+  if (![pointA, vertex, pointC].every(Boolean)) return null;
+
+  const vectorA = { x: pointA.x - vertex.x, y: pointA.y - vertex.y, z: (pointA.z ?? 0) - (vertex.z ?? 0) };
+  const vectorC = { x: pointC.x - vertex.x, y: pointC.y - vertex.y, z: (pointC.z ?? 0) - (vertex.z ?? 0) };
+  const magnitudeA = Math.hypot(vectorA.x, vectorA.y, vectorA.z);
+  const magnitudeC = Math.hypot(vectorC.x, vectorC.y, vectorC.z);
+
+  if (!magnitudeA || !magnitudeC) return null;
+
+  const cosine = (vectorA.x * vectorC.x + vectorA.y * vectorC.y + vectorA.z * vectorC.z) / (magnitudeA * magnitudeC);
+  return Math.round(toDegrees(Math.acos(Math.min(1, Math.max(-1, cosine)))) * 10) / 10;
+}
+
 const SIDES = {
   left: { hip: 23, knee: 25, ankle: 27 },
   right: { hip: 24, knee: 26, ankle: 28 },

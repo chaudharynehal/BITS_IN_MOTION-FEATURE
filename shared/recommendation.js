@@ -1,4 +1,4 @@
-import { normalizeSpaceClass, SPACE_CLASSES } from './profile.js';
+import { normalizeSpaceClass, normalizeEquipment, SPACE_CLASSES } from './profile.js';
 
 export function getCircuitRounds(minutes) {
   const m = Number(minutes) || 20;
@@ -51,18 +51,11 @@ export function prescriptionFromLabel(label) {
 export function normalizePreferences(profile = {}) {
   const goal = normalize(profile.goal);
   const location = normalize(profile.location);
-  const requestedEquipment = normalize(profile.equipment);
   const time = Number(profile.time || profile.availableMinutes);
   const spaceClass = normalizeSpaceClass(profile.location);
   const isCompact = spaceClass === SPACE_CLASSES.COMPACT;
   const isOpen = spaceClass === SPACE_CLASSES.OPEN;
-  const equipment = requestedEquipment === 'backpack'
-    ? 'Backpack'
-    : requestedEquipment === 'dumbbell' || requestedEquipment === 'dumbbells'
-      ? 'Dumbbell'
-      : requestedEquipment === 'resistance band'
-        ? 'Resistance Band'
-        : 'None';
+  const equipment = normalizeEquipment(profile.equipment);
   return {
     level: normalize(profile.level || profile.fitnessLevel) === 'intermediate' ? 'Intermediate' : 'Beginner',
     goal: goal.includes('strength') || goal.includes('muscle') ? 'strength' : goal.includes('weight') || goal.includes('fat') ? 'weight-management' : 'stay-fit',
@@ -153,14 +146,24 @@ export function recommendWorkout(profile = {}, catalogue = []) {
   const usesBackpack = selected.some((item) => normalize(item.equipment) === 'backpack');
   const replacedJumpingJacksForSpace = !p.openSpace && !p.lowImpact && cardio === 'marching';
 
+  const spaceReason = replacedJumpingJacksForSpace
+    ? (p.spaceLabel === 'PG Room'
+      ? 'Jumping jacks replaced with marching to fit your PG Room space: compact, minimal-travel movement preference'
+      : p.spaceLabel === 'Hostel'
+        ? 'Jumping jacks replaced with marching to fit your Hostel space: compact student-room movement preference'
+        : `Jumping jacks replaced with marching to fit your ${p.spaceLabel} space: compact movement preference`)
+    : p.openSpace
+      ? `${p.spaceLabel} space: wider movements are eligible when impact preference allows`
+      : p.spaceLabel === 'PG Room'
+        ? 'PG Room space: compact, minimal-travel movements for smallest room spaces'
+        : p.spaceLabel === 'Hostel'
+          ? 'Hostel space: compact student-room movements with modest space'
+          : `${p.spaceLabel} space: compact, low-travel movements only`;
+
   const reasons = [
     `${p.level} pacing: ${workSeconds}s work / ${restSeconds}s recovery intervals`,
     `${p.minutes} minutes including warm-up, recovery and cooldown`,
-    replacedJumpingJacksForSpace
-      ? `Jumping jacks replaced with marching to fit your ${p.spaceLabel}`
-      : p.openSpace
-        ? `${p.spaceLabel}: wider movements are eligible when impact preference allows`
-        : `${p.spaceLabel}: compact, low-travel movements only`,
+    spaceReason,
     usesBackpack
       ? 'uses Backpack'
       : p.unsupportedEquipment

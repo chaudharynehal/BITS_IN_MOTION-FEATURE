@@ -1,5 +1,51 @@
 # BITS in Motion — Current Project State
 
+## In progress — Emergent experience pass (branch `agent/emergent-experience-v2`, 23 September 2026)
+
+- **Scope:** presentation-only product/UX pass by the Emergent agent. No MediaPipe, rep-counting, camera lifecycle, voice, recommendation, equipment/location, Neon, Google Auth, API or Vercel changes. Not merged, not deployed.
+- **Homepage:** `HomeCoachPreview` rebuilt as a forward-kinematic side-view squat rig driven by `requestAnimationFrame` (ankle → knee → hip → shoulder → elbow → wrist chain). Body parts and the six landmark dots, skeleton lines, knee arc and knee-angle readout all derive from the same joint model, so the overlay never detaches. Phases: Standing → Lowering → Bottom position → Rising → Rep complete; reps only increase. Pauses when off-screen, hidden tab or manually paused; reduced motion shows a static depth pose. Test hooks kept: `.home-coach-stage[data-phase]`, `.home-demo-reps strong`, `aria-label="Pause demonstration"`. Hero copy tightened, proof row (`.home-proof`) added, privacy strip is a soft card, restrained entrance motion and card hover.
+- **Shell fix:** the route-focus `<h1>` no longer shows the browser focus ring on any app screen (`main h1[tabindex="-1"]:focus`). Coach top-bar actions now lay out in a row (previously stacked by `.coach-topbar > div` grid).
+- **Dashboard:** rebuilt as a fitness home screen: dark “Today’s workout” card with real plan title/focus/meta/movement list and Start/View actions, shared `WeeklyActivityCard` (7-day bars, sessions/minutes/reps/kcal totals and streak from existing sessions), Last session, Quick start, Profile summary + camera tip. Old `.dashboard-*` CSS block removed from `global.css`; new rules live in `src/styles/experience.css`.
+- **Progress:** same weekly card plus a compact all-time totals rail and the existing history list.
+- **Camera Coach (presentation only):** rep count / stage / metric moved into a glass HUD overlaid on the camera viewport (`.coach-hud`, `.rep-card` retained); cue and End/Skip controls sit directly under the viewport; guide/privacy/disclaimer in the aside. Desktop viewport height is bounded so the cue stays above the fold; dedicated 844×390 layout puts cue + controls beside the camera. All detection/camera/voice code in `CoachScreen.jsx` above the render tree is untouched.
+- **Files:** `src/components/HomeCoachPreview.jsx`, `src/components/WeeklyActivityCard.jsx` (new), `src/utils/weeklyActivity.js` (new), `src/styles/experience.css` (new), `src/screens/WelcomeScreen.jsx`, `src/screens/DashboardScreen.jsx`, `src/screens/ProgressScreen.jsx`, `src/screens/CoachScreen.jsx` (JSX from `.coach-layout` down only), `src/styles/homepage.css`, `src/styles/global.css`, `src/main.jsx`.
+- **Verification:** `npm test` 15 suites / 830 passed. `npm run build` PASS. `node scripts/verify-homepage.mjs` 38/38 checks (390, 430, 844×390, 768, 820, 1024, 1440; motion, paused, reduced-motion). `node scripts/verify-browser.mjs` 151 checks passed, 0 JavaScript errors, 0 network failures, no horizontal overflow at 390/768/820/1024/1440/844×390 (run against a throwaway Vite instance with a mock `VITE_GOOGLE_CLIENT_ID`; Node 20 needed `--experimental-websocket` and Chrome `--no-sandbox` in the container — no repo change).
+- **Requests for Codex (technical):** expose a small “tracking quality / landmarks visible” state from the detector so the HUD can show Tracking vs. Reacquiring instead of inferring from `measurementValue`; prefer a portrait camera constraint on phones so the mobile viewport fills the width.
+- **Requests for Gemini (product logic):** none required; weekly aggregation is presentation-only and reads existing session fields.
+## Camera/voice validation hardening pass (23 September 2026)
+
+- **Branch:** `agent/codex-camera-v2`.
+- **Status:** local camera/voice validation implementation complete and verified; not merged or deployed.
+- **Scope:** camera engine, voice lifecycle and automated validation only. Homepage/dashboard/profile/recommendation/database/deployment ownership areas were not changed.
+- **Replay harness:** added deterministic MediaPipe-style 33-landmark replay fixtures under `src/vision/testing/` that drive the real `createExerciseDetector()` path, including production smoothing, visibility filtering, geometry, readiness gates and state machines. The replay data includes timestamps, visibility/presence and world landmarks.
+- **Crunch validation:** added realistic replay coverage for clean, slow, fast, partial, tiny movement, held-flexed, threshold rocking, jittered, temporary shoulder/hip loss, missing ankles, 10-rep, incomplete-final-rep, flexed-pause, mid-rep start and abrupt-reacquisition cases. Seeded variation tests cover body proportions, side visibility, camera tilt, movement speed, confidence and coordinate noise.
+- **Other exercise validation:** added squat, push-up and jumping-jack replay corpora for valid reps, partial movement, threshold jitter, pauses, 10-rep sequences, visibility loss and side/body variation. Push-ups now reject counting when the body line is sagged below the existing cue threshold instead of merely warning after counting.
+- **Readiness/counting fix:** invalid measurements caused by framing, lighting or body-line gates are now passed to counters as invalid, preventing squats/crunches from counting when the measurement was not ready.
+- **Subject continuity:** hardened tracking with continuous-motion and index-switch thresholds, then added a stress test for A lock, B entry, crossing, temporary A loss, delayed B reacquisition, scale change and later A reacquisition. The logic remains body-center/scale/landmark-continuity only; no face or biometric identity.
+- **Voice:** extracted a testable browser SpeechSynthesis controller with cached voice selection, `voiceschanged` handling, regional English priority (`en-IN`, then `en-GB`, then `en-US`), short natural cues and spoken count words. Voice remains local/browser-based with graceful unsupported-browser fallback.
+- **Camera lifecycle:** Camera Coach now treats unexpected camera track ending as a recoverable camera error, stops processing, clears overlays and cancels speech. Resize/orientation behavior was exercised without restarting the camera stream.
+- **Browser harness:** added `scripts/verify-camera-coach.mjs`, which starts an isolated local Vite server, mocks `getUserMedia`, mocks SpeechSynthesis, intercepts only the MediaPipe wrapper module, replays deterministic landmarks through `detectForVideo()`, verifies actual CoachScreen UI rep counts for all four camera exercises, exercises camera permission/unavailable/model-failure/track-ended paths, voice toggle/cancellation, navigation cleanup and 1920×1080, 1280×720, 640×480, 390×844 and 844×390 camera dimensions.
+- **Verification:** `npm test -- src/vision`: 10 suites / 109 passed. `npm test`: 19 suites / 909 passed. `node scripts/verify-camera-coach.mjs`: PASS. `npm run build`: PASS. `git diff --check`: PASS. `BROWSER_TEST_URL=http://127.0.0.1:5189 node scripts/verify-browser.mjs`: PASS with the existing mocked API/camera scope and screenshots in `/var/folders/d2/xq_721js4xq6jrfbfqmxp8gh0000gp/T/bits-motion-browser-0etEos`.
+- **Known limitations:** these tests substantially increase automated confidence but still use deterministic landmarks and mocked camera pixels. They do not prove physical MediaPipe accuracy for real bodies, clothing, rooms, camera lenses, device mounting, or lighting variation.
+- **Recommended next step:** run real-device physical QA for all four camera exercises before release, especially crunches on multiple body types and phone placements.
+
+## Camera engine worktree — camera-v2 robustness pass (23 September 2026)
+
+- **Branch:** `agent/codex-camera-v2`.
+- **Status:** local camera-engine implementation complete and verified; not merged or deployed.
+- **Scope:** camera engine and Camera Coach technical integration only. Homepage, dashboard, profile/setup logic, equipment/location logic, recommendation eligibility, production database and deployment configuration were not changed.
+- **MediaPipe:** kept Google AI Edge MediaPipe Pose Landmarker with the local lite task model, `VIDEO` running mode, GPU with CPU fallback and local browser processing. Updated `numPoses` from 1 to 2 so the app can maintain body-continuity when another person enters the frame.
+- **Crunch detection:** replaced the crunch counter with an explicit `finding-start → extended → flexing → flexed → extending → extended` model. Crunch reps now require a stable extended baseline, meaningful torso angle range, stable flexed hold, return to extension, min/max rep duration, cooldown, visibility gates and temporary-loss recovery. The measurement layer now requires shoulder/hip/knee for crunch setup instead of incorrectly requiring the ankle, and feeds shoulder-knee and torso-compression ratios into the counter. World-landmark 3D angle support was added when available.
+- **Subject continuity:** added a privacy-preserving subject tracker based on body center, body scale, visible landmark quality and previous pose location. It prefers the first stable exercising person, follows that person if pose ordering changes, and only reacquires another pose after the tracked subject is lost for a sustained number of frames. No face recognition, biometric identity or frame persistence was introduced.
+- **Low-light/readiness:** added downsampled in-memory frame brightness sampling and readiness reasons for improve-lighting, key-joint visibility and jumping-jack overhead room. Near-dark frames are not treated as ready.
+- **Exercise setup guidance:** detector configs now expose exercise-specific setup cues for squats, push-ups, crunches and jumping jacks. The existing Camera Coach floor setup banner uses the configured floor-exercise setup text; no layout redesign was performed.
+- **Voice and lifecycle:** speech remains browser `SpeechSynthesis` only, with no cloud TTS. Cues remain optional, throttled and non-overlapping; speech is cancelled through a shared cleanup path on exercise change, reset, leaving Camera Coach, disabling voice and unmount.
+- **Mobile/performance:** camera constraints now request user-facing 16:9 video without restart loops. The frame loop samples brightness on a throttle, tracks selected pose landmarks, and avoids React state updates unless displayed camera state changes or a short UI interval elapses.
+- **Files changed:** `src/screens/CoachScreen.jsx`, `src/vision/angle.js`, `src/vision/camera.js`, `src/vision/crunchStateMachine.js`, `src/vision/exerciseDetectors.js`, `src/vision/exerciseMeasurements.js`, `src/vision/poseLandmarker.js`, new `src/vision/subjectContinuity.js`, new `src/vision/frameReadiness.js`, and related tests.
+- **Verification:** `npm test -- src/vision`: 8 suites / 42 passed. `npm test`: 17 suites / 842 passed. `npm run build`: PASS. `git diff --check`: PASS.
+- **Known limitations:** automated tests use deterministic synthetic landmarks and do not prove real-world accuracy across body types, phones, room sizes, clothing, lighting, camera placement or exercise variations. Physical-device QA remains required for crunches, squats, push-ups and jumping jacks.
+- **Recommended next step:** run manual device QA for all four camera-supported movements in normal indoor light, dim light and multi-person interruption scenarios before integration/release.
+
 ## Latest live release — cohesive homepage product experience (23 September 2026)
 
 - **Release branch:** `feature/student-homepage-experience`, based on authoritative `feature/google-auth-user-database` at `c3b53e9`. Origin was fetched and remained at that checkpoint before release.
@@ -85,6 +131,34 @@
 - The catalogue intentionally has no dumbbell or resistance-band exercises yet; those preferences produce an explained bodyweight fallback.
 - Real Google authentication and physical camera motion require live user/device interaction; production smoke testing must report those boundaries honestly.
 
+## Product logic and recommendation engine handoff (agent/gemini-product-logic-v2)
+
+- **Branch:** `agent/gemini-product-logic-v2`
+- **Ownership:** Profile/setup data behavior, equipment model, location model, recommendation logic, exercise eligibility/filtering, personalization, local-vs-Neon catalogue consistency, recommendation tests, and plan-quality logic. (Emergent UI ownership and Codex vision/audio ownership strictly preserved).
+- **Equipment model:**
+  - Supported options: `None / Bodyweight`, `Dumbbell`, `Resistance Band`, `Backpack`.
+  - Normalization: `normalizeEquipment` safely resolves all aliases (`None / Bodyweight`, `Bodyweight`, `bodyweight`, `none`, `Dumbbells`, `dumbbells`, `dumbbell`, `Resistance band`, `resistance band`, `backpack`) without data loss.
+  - Catalogue integrity: Did not invent unsupported movements. The catalogue holds 10 verified exercises. Backpack rows are selected when eligible (Intermediate + Strength or Stay Fit). Dumbbell and Resistance Band preferences are safely stored and transparently fall back to supported bodyweight exercises with explicit explanation.
+  - Profile note fix: UI catalogue note now exclusively targets unsupported equipment (`UNSUPPORTED_EQUIPMENT`), preventing false fallback notes for `None / Bodyweight`.
+- **Location model:**
+  - Simplified user-facing choices: `PG Room`, `Hostel`, `Home`.
+  - Intended semantics implemented & explained:
+    - `PG Room`: smallest-space assumption, compact, minimal-travel movements only (jumping-jacks and lunges excluded; marching replaces jumping jacks for cardio).
+    - `Hostel`: compact student-room environment with modest space (jumping-jacks and lunges excluded; marching replaces jumping jacks for cardio).
+    - `Home`: flexible-space assumption allowing wider movements (jumping-jacks and lunges eligible when goal and impact allow).
+  - Compatibility: Legacy locations (`PG room`, `Hostel room`, `Open indoor space`, `Open space / Gym`, `Campus`, `Outdoor`, `Gym`, `Park / outdoor ground`, `Campus gym`, `Dorm`, `Dorm room`, `Bedroom`) are recognized and normalized without validation errors.
+  - Dashboard reason integration: Every location explanation explicitly includes `space:` tag, ensuring dashboard's space reason query matches and displays the tailored space context.
+- **Personalization & plan quality:**
+  - Full matrix of available time (10, 20, 30, 45, 60 min), fitness goals (Stay fit, Build strength, Support weight management), fitness levels (Beginner, Intermediate), equipment, location, and impact preferences verified.
+  - Exact duration guarantees: 10m (3 stations, 1 round), 20m (4 stations, 2 rounds), 30m (5 stations, 4 rounds), 45m (5 stations, 6 rounds), 60m (5 stations, 8 rounds). Warmup, stations, round breaks (60s), and cooldown sum to the exact second (0 discrepancy) across all 720 combinations.
+- **Catalogue parity:**
+  - Guest and signed-in accounts produce 100% identical plans across all supported profile combinations and legacy inputs.
+  - Database schema and local `EXERCISES` catalogue have complete parity. No database migration is required. Production 3-row goal-tag patch is verified as already applied.
+- **Verification:**
+  - `npm test`: **15 test suites, 886 passed, 0 skipped, 0 failed**.
+  - `npm run build`: **PASS**, clean production build.
+  - `git diff --check`: **PASS**.
+
 ## Safe continuation point
 
-The cohesive homepage release is live and verified. No homepage release work remains. Physical-device QA for crunches, push-ups, squats, and jumping jacks remains a separate manual activity. Catalogue expansion for dumbbells or resistance bands should add verified exercise data before recommendations attempt to use that equipment.
+The cohesive homepage release is live and verified. Product logic, recommendation engine, equipment, location, and catalogue parity have been audited, simplified, fortified, and tested on `agent/gemini-product-logic-v2` (886/886 tests passing, 0 failures). Ready for integration review.

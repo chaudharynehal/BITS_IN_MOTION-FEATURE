@@ -2,10 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { measureCrunch, measurePushup } from './exerciseMeasurements';
 import { createExerciseDetector } from './exerciseDetectors';
 
-function sidePose({ shoulder = [0.2, 0.55], elbow = [0.3, 0.55], wrist = [0.4, 0.55], hip = [0.5, 0.55], knee = [0.75, 0.55], ankle = [0.9, 0.55], visibility = 0.96 } = {}) {
+function sidePose({
+  shoulder = [0.2, 0.55],
+  elbow = [0.3, 0.55],
+  wrist = [0.4, 0.55],
+  hip = [0.5, 0.55],
+  knee = [0.75, 0.55],
+  ankle = [0.9, 0.55],
+  visibility = 0.96,
+  ankleVisibility = visibility,
+} = {}) {
   const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0 }));
-  for (const [index, point] of [[11, shoulder], [13, elbow], [15, wrist], [23, hip], [25, knee], [27, ankle]]) {
-    landmarks[index] = { x: point[0], y: point[1], visibility };
+  for (const [index, point, pointVisibility] of [[11, shoulder, visibility], [13, elbow, visibility], [15, wrist, visibility], [23, hip, visibility], [25, knee, visibility], [27, ankle, ankleVisibility]]) {
+    landmarks[index] = { x: point[0], y: point[1], visibility: pointVisibility };
   }
   return landmarks;
 }
@@ -28,7 +37,17 @@ describe('exercise landmark measurements', () => {
   it('rejects low-confidence floor landmarks and reports useful framing', () => {
     const measurement = measureCrunch(sidePose({ visibility: 0.2 }));
     expect(measurement.valid).toBe(false);
-    expect(measurement.framingReason).toBe('full-body');
+    expect(measurement.framingReason).toBe('key-joints');
+  });
+
+  it('does not require ankle visibility for crunch setup', () => {
+    const measurement = measureCrunch(sidePose({ ankleVisibility: 0.05 }));
+    expect(measurement).toMatchObject({ valid: true, framingReason: 'ready' });
+  });
+
+  it('reports low light before claiming the body is ready', () => {
+    const measurement = measureCrunch({ landmarks: sidePose(), frameBrightness: 0.06 });
+    expect(measurement).toMatchObject({ valid: false, framingReason: 'improve-lighting' });
   });
 
   it('identifies a vertical camera setup for a floor movement', () => {

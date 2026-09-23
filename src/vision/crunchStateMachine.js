@@ -1,19 +1,35 @@
 export const CRUNCH_CONFIG = Object.freeze({
   extendedAngle: 138,
-  curledAngle: 105,
+  curledAngle: 112,
+  softCurledAngle: 122,
   minimumRange: 28,
+  flexStartRange: 10,
+  returnRange: 10,
+  minimumShoulderKneeRange: 0.22,
+  minimumCompressionRange: 0.16,
+  returnRatioTolerance: 0.16,
   minVisibility: 0.58,
   stableFrames: 4,
   stableDurationMs: 140,
+  minFlexedDurationMs: 120,
   minRepDurationMs: 450,
   maxRepDurationMs: 8000,
   minRepIntervalMs: 900,
   lostResetMs: 1200,
 });
 
+function finiteOrNull(value) {
+  return Number.isFinite(value) ? value : null;
+}
+
+function hasRatioRange(baseline, current, minimumRange) {
+  if (baseline === null || current === null) return false;
+  return baseline - current >= minimumRange;
+}
+
 // Crunches need stronger safeguards than a generic two-threshold counter. A
-// valid repetition must establish an extended baseline, demonstrate meaningful
-// range of motion, hold the flexed position, and return under visibility.
+// valid repetition must begin from a stable extended baseline, show meaningful
+// torso flexion, hold a flexed position, and return to the baseline once.
 export function createCrunchCounter(overrides = {}) {
   const config = { ...CRUNCH_CONFIG, ...overrides };
   let phase = 'finding-start';
@@ -21,8 +37,14 @@ export function createCrunchCounter(overrides = {}) {
   let candidate = null;
   let candidateFrames = 0;
   let candidateSince = 0;
-  let extendedBaseline = null;
+  let baselineAngle = null;
+  let baselineShoulderKneeRatio = null;
+  let baselineTorsoCompression = null;
+  let movementStartedAt = null;
   let flexedAt = null;
+  let minAngle = null;
+  let minShoulderKneeRatio = null;
+  let minTorsoCompression = null;
   let lastRepAt = -Infinity;
   let missingSince = null;
 
@@ -34,18 +56,92 @@ export function createCrunchCounter(overrides = {}) {
 
   function clearMovement() {
     phase = 'finding-start';
-    extendedBaseline = null;
+    baselineAngle = null;
+    baselineShoulderKneeRatio = null;
+    baselineTorsoCompression = null;
+    movementStartedAt = null;
     flexedAt = null;
+    minAngle = null;
+    minShoulderKneeRatio = null;
+    minTorsoCompression = null;
     clearCandidate();
   }
 
-  function classificationFor(angle) {
-    if (angle >= config.extendedAngle) return 'extended';
-    if (angle <= config.curledAngle) return 'curled';
+  function sampleFrom(input) {
+    return {
+      angle: finiteOrNull(input.angle),
+      shoulderKneeRatio: finiteOrNull(input.shoulderKneeRatio),
+      torsoCompression: finiteOrNull(input.torsoCompression),
+    };
+  }
+
+  function updateMinimums(sample) {
+    minAngle = minAngle === null ? sample.angle : Math.min(minAngle, sample.angle);
+    if (sample.shoulderKneeRatio !== null) {
+      minShoulderKneeRatio = minShoulderKneeRatio === null
+        ? sample.shoulderKneeRatio
+        : Math.min(minShoulderKneeRatio, sample.shoulderKneeRatio);
+    }
+    if (sample.torsoCompression !== null) {
+      minTorsoCompression = minTorsoCompression === null
+        ? sample.torsoCompression
+        : Math.min(minTorsoCompression, sample.torsoCompression);
+    }
+  }
+
+  function calibrateBaseline(sample) {
+    baselineAngle = baselineAngle === null ? sample.angle : Math.max(baselineAngle, sample.angle);
+    if (sample.shoulderKneeRatio !== null) {
+      baselineShoulderKneeRatio = baselineShoulderKneeRatio === null
+        ? sample.shoulderKneeRatio
+        : Math.max(baselineShoulderKneeRatio, sample.shoulderKneeRatio);
+    }
+    if (sample.torsoCompression !== null) {
+      baselineTorsoCompression = baselineTorsoCompression === null
+        ? sample.torsoCompression
+        : Math.max(baselineTorsoCompression, sample.torsoCompression);
+    }
+  }
+
+  function hasStartedFlexion(sample) {
+    if (baselineAngle === null) return false;
+    return baselineAngle - sample.angle >= config.flexStartRange;
+  }
+
+  function hasSupplementalFlexion(sample) {
+    return hasRatioRange(baselineShoulderKneeRatio, sample.shoulderKneeRatio, config.minimumShoulderKneeRange)
+      || hasRatioRange(baselineTorsoCompression, sample.torsoCompression, config.minimumCompressionRange);
+  }
+
+  function hasFullFlexion(sample) {
+    if (baselineAngle === null) return false;
+    const angleRange = baselineAngle - sample.angle;
+    if (angleRange < config.minimumRange) return false;
+    if (sample.angle <= config.curledAngle) return true;
+    return sample.angle <= config.softCurledAngle && hasSupplementalFlexion(sample);
+  }
+
+  function hasReturnedToExtended(sample) {
+    if (sample.angle < config.extendedAngle) return false;
+    if (baselineShoulderKneeRatio !== null && sample.shoulderKneeRatio !== null) {
+      return sample.shoulderKneeRatio >= baselineShoulderKneeRatio - config.returnRatioTolerance;
+    }
+    if (baselineTorsoCompression !== null && sample.torsoCompression !== null) {
+      return sample.torsoCompression >= baselineTorsoCompression - config.returnRatioTolerance;
+    }
+    return true;
+  }
+
+  function classificationFor(sample) {
+    if (baselineAngle === null) {
+      return sample.angle >= config.extendedAngle ? 'extended' : 'transition';
+    }
+    if (hasReturnedToExtended(sample)) return 'extended';
+    if (hasFullFlexion(sample)) return 'flexed';
     return 'transition';
   }
 
-  function update({ angle, visibility = 1, timestamp = performance.now() }) {
+  function update({ angle, shoulderKneeRatio = null, torsoCompression = null, visibility = 1, timestamp = performance.now() }) {
     if (!Number.isFinite(angle) || visibility < config.minVisibility) {
       if (missingSince === null) missingSince = timestamp;
       clearCandidate();
@@ -54,15 +150,20 @@ export function createCrunchCounter(overrides = {}) {
     }
     missingSince = null;
 
-    const classification = classificationFor(angle);
+    const sample = sampleFrom({ angle, shoulderKneeRatio, torsoCompression });
+    const classification = classificationFor(sample);
+
     if (classification === 'transition') {
       clearCandidate();
-      return {
-        reps,
-        phase: phase === 'flexed' ? 'returning' : phase === 'extended' ? 'moving' : phase,
-        event: null,
-        classification,
-      };
+      if ((phase === 'extended' || phase === 'flexing') && hasStartedFlexion(sample)) {
+        if (movementStartedAt === null) movementStartedAt = timestamp;
+        phase = 'flexing';
+        updateMinimums(sample);
+      } else if (phase === 'flexed' || phase === 'extending') {
+        phase = 'extending';
+        updateMinimums(sample);
+      }
+      return { reps, phase, event: null, classification };
     }
 
     if (candidate !== classification) {
@@ -81,18 +182,40 @@ export function createCrunchCounter(overrides = {}) {
     if (classification === 'extended') {
       if (phase === 'finding-start') {
         phase = 'extended';
-        extendedBaseline = angle;
+        calibrateBaseline(sample);
         event = 'ready';
       } else if (phase === 'extended') {
-        extendedBaseline = Math.max(extendedBaseline ?? angle, angle);
-      } else if (phase === 'flexed') {
-        const duration = flexedAt === null ? 0 : timestamp - flexedAt;
+        calibrateBaseline(sample);
+      } else if (phase === 'flexing') {
         phase = 'extended';
-        extendedBaseline = angle;
+        calibrateBaseline(sample);
+        movementStartedAt = null;
         flexedAt = null;
+        minAngle = null;
+        minShoulderKneeRatio = null;
+        minTorsoCompression = null;
+      } else if (phase === 'flexed' || phase === 'extending') {
+        const repDuration = movementStartedAt === null ? 0 : timestamp - movementStartedAt;
+        const flexedDuration = flexedAt === null ? 0 : timestamp - flexedAt;
+        const completedRange = baselineAngle === null || minAngle === null ? 0 : baselineAngle - minAngle;
+        const hadHardAngle = minAngle !== null && minAngle <= config.curledAngle;
+        const hadSupplementalRange = hasRatioRange(baselineShoulderKneeRatio, minShoulderKneeRatio, config.minimumShoulderKneeRange)
+          || hasRatioRange(baselineTorsoCompression, minTorsoCompression, config.minimumCompressionRange);
+
+        phase = 'extended';
+        calibrateBaseline(sample);
+        movementStartedAt = null;
+        flexedAt = null;
+        minAngle = null;
+        minShoulderKneeRatio = null;
+        minTorsoCompression = null;
+
         if (
-          duration >= config.minRepDurationMs
-          && duration <= config.maxRepDurationMs
+          completedRange >= config.minimumRange
+          && (hadHardAngle || hadSupplementalRange)
+          && flexedDuration >= config.minFlexedDurationMs
+          && repDuration >= config.minRepDurationMs
+          && repDuration <= config.maxRepDurationMs
           && timestamp - lastRepAt >= config.minRepIntervalMs
         ) {
           reps += 1;
@@ -100,15 +223,14 @@ export function createCrunchCounter(overrides = {}) {
           event = 'rep';
         }
       }
-    } else if (
-      classification === 'curled'
-      && phase === 'extended'
-      && extendedBaseline !== null
-      && extendedBaseline - angle >= config.minimumRange
-    ) {
+    } else if (classification === 'flexed' && (phase === 'extended' || phase === 'flexing')) {
+      if (movementStartedAt === null) movementStartedAt = timestamp;
       phase = 'flexed';
       flexedAt = timestamp;
+      updateMinimums(sample);
       event = 'target';
+    } else if (classification === 'flexed' && phase === 'flexed') {
+      updateMinimums(sample);
     }
 
     clearCandidate();
