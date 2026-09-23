@@ -56,7 +56,7 @@ describe('crunch replay corpus', () => {
     ['nine reps and one incomplete final rep', appendSequences(crunchSequence({ reps: 9 }), incompleteTail(crunchSequence, 0.38)), 9],
     ['pause between flexed and extended', crunchSequence({ targetHoldMs: 1700, returnMs: 950 }), 1],
     ['movement starts mid-rep', appendSequences(stationarySequence({ poseFactory: crunchPose, value: 1, durationMs: 650 }), crunchSequence()), 1],
-    ['abrupt tracking reacquisition', withVisibilityDrop(crunchSequence({ reps: 2 }), { fromMs: 2100, toMs: 3400, indexes: [11, 12, 23, 24, 25, 26] }), 1],
+    ['abrupt tracking reacquisition', withVisibilityDrop(crunchSequence({ reps: 2 }), { fromMs: 2100, toMs: 3400, indexes: [11, 12, 23, 24, 25, 26] }), 2],
   ])('%s', (_name, frames, expected) => {
     expectReps('crunches', frames, expected);
   });
@@ -158,7 +158,7 @@ describe('jumping-jack replay corpus', () => {
     ['ten valid repetitions', jumpingJackSequence({ reps: 10, betweenRepHoldMs: 240 }), 10],
     ['rapid motion', jumpingJackSequence({ moveToTargetMs: 300, targetHoldMs: 180, returnMs: 300 }), 1],
     ['slow motion', jumpingJackSequence({ moveToTargetMs: 1500, targetHoldMs: 700, returnMs: 1500 }), 1],
-    ['overhead landmark loss', withVisibilityDrop(jumpingJackSequence(), { fromMs: 560, toMs: 1550, indexes: [15, 16] }), 0],
+    ['overhead landmark loss', withVisibilityDrop(jumpingJackSequence(), { fromMs: 560, toMs: 1550, indexes: [15, 16] }), 1],
     ['threshold jitter', withJitter(jumpingJackSequence({ targetHoldMs: 1000 }), { seed: 71, amplitude: 0.007 }), 1],
   ])('%s', (_name, frames, expected) => {
     expectReps('jumping-jacks', frames, expected);

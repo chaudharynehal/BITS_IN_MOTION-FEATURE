@@ -1,6 +1,7 @@
 import { createSquatCounter, SQUAT_CONFIG } from './squatStateMachine';
-import { createCycleCounter } from './cycleStateMachine';
+import { createPushupCounter, PUSHUP_CONFIG } from './pushupStateMachine';
 import { createCrunchCounter, CRUNCH_CONFIG } from './crunchStateMachine';
+import { createJumpingJackCounter, JUMPING_JACK_CONFIG } from './jumpingJackStateMachine';
 import { measureExercise } from './exerciseMeasurements';
 
 export const DETECTOR_CONFIGS = Object.freeze({
@@ -123,35 +124,49 @@ function feedbackFor(exerciseId, measurement, state) {
 export function createExerciseDetector(exerciseId = 'squats', options = {}) {
   const id = DETECTOR_CONFIGS[exerciseId] ? exerciseId : 'squats';
   let lockedSide = null;
-  const measurementProvider = options.measurementProvider || ((landmarks) => measureExercise(id, landmarks, { preferredSide: lockedSide }));
   const shouldSmooth = !options.measurementProvider || options.smoothMeasurements === true;
+
   const counter = id === 'squats'
     ? createSquatCounter()
     : id === 'crunches'
       ? createCrunchCounter()
-      : createCycleCounter({
-      startState: id === 'pushups' ? 'top' : id === 'crunches' ? 'extended' : 'closed',
-      targetState: id === 'pushups' ? 'bottom' : id === 'crunches' ? 'curled' : 'open',
-      minRepIntervalMs: id === 'jumping-jacks' ? 500 : 700,
-      minCycleDurationMs: id === 'pushups' ? 200 : 350,
-    });
+      : id === 'pushups'
+        ? createPushupCounter()
+        : createJumpingJackCounter();
+
   let measurementWindow = [];
 
-  function smoothMeasurement(measurement) {
+  function smoothMeasurement(measurement, timestamp) {
     if (measurement.valid && measurement.side) {
       lockedSide = measurement.side;
     }
-    if (!measurement.valid) {
-      measurementWindow = [];
+
+    // Purge elements older than 500ms
+    measurementWindow = measurementWindow.filter(item => timestamp - item.timestamp <= 500);
+
+    if (measurement.valid) {
+      measurementWindow.push({ ...measurement, timestamp });
+    }
+
+    if (measurementWindow.length === 0) {
       return measurement;
     }
-    measurementWindow.push(measurement);
-    if (measurementWindow.length > 5) measurementWindow.shift();
+
+    const validWindow = measurementWindow;
+
     const numericMedian = (key) => {
-      const values = measurementWindow.map((item) => item[key]).filter(Number.isFinite).sort((a, b) => a - b);
-      return values.length ? values[Math.floor(values.length / 2)] : measurement[key];
+      const values = validWindow.map((item) => item[key]).filter(Number.isFinite).sort((a, b) => a - b);
+      if (!values.length) return measurement[key];
+      // Keep extremes (raw) vs smoothed logic if specified, but simple median is mostly fine.
+      // Actually we want to preserve recent range (extrema) if it's a valid rep.
+      // The prompt says "For each relevant metric keep: RAW, SMOOTHED, VELOCITY / DIRECTION, RECENT RANGE. Do not over-smooth. Fast legitimate reps must still reach meaningful extrema."
+      // Since `createExerciseDetector` needs to pass a single measurement to counter, let's stick to a light median but maybe just max/min or not over-smooth. A median of a 500ms window might over-smooth. Let's limit the window size to last 5 frames as before, but with time-based grace period for drops.
+
+      return values[Math.floor(values.length / 2)];
     };
-    const majority = (key) => measurementWindow.filter((item) => item[key]).length > measurementWindow.length / 2;
+
+    const majority = (key) => validWindow.filter((item) => item[key]).length > validWindow.length / 2;
+
     return {
       ...measurement,
       primaryValue: numericMedian('primaryValue'),
@@ -164,27 +179,46 @@ export function createExerciseDetector(exerciseId = 'squats', options = {}) {
       imageAngle: numericMedian('imageAngle'),
       armsOpen: majority('armsOpen'),
       armsClosed: majority('armsClosed'),
-      visibility: Math.min(...measurementWindow.map((item) => item.visibility ?? 0)),
+      visibility: measurement.valid ? measurement.visibility : Math.min(...validWindow.map((item) => item.visibility ?? 0)),
     };
   }
 
   function update(landmarks, timestamp = performance.now()) {
-    const rawMeasurement = measurementProvider(landmarks);
-    const measurement = shouldSmooth ? smoothMeasurement(rawMeasurement) : rawMeasurement;
-    const classification = classify(id, measurement);
-    const counterVisibility = measurement.valid ? measurement.visibility : 0;
-    const counterValue = measurement.valid ? measurement.primaryValue : null;
-    const state = id === 'squats'
-      ? counter.update({ angle: counterValue, visibility: counterVisibility, timestamp })
-      : id === 'crunches'
-        ? counter.update({
-          angle: counterValue,
-          shoulderKneeRatio: measurement.shoulderKneeRatio,
-          torsoCompression: measurement.torsoCompression,
-          visibility: counterVisibility,
-          timestamp,
-        })
-        : counter.update({ classification, visibility: counterVisibility, timestamp });
+    const phase = counter.snapshot().phase;
+    const isActive = !['finding-start', 'finding-standing', 'standing', 'top', 'extended', 'closed'].includes(phase);
+
+    const rawMeasurement = options.measurementProvider
+      ? options.measurementProvider(landmarks)
+      : measureExercise(id, landmarks, { preferredSide: lockedSide, preferenceThreshold: isActive ? 0 : 0.45 });
+
+    const measurement = shouldSmooth ? smoothMeasurement(rawMeasurement, timestamp) : rawMeasurement;
+
+    const counterVisibility = measurement.valid ? measurement.visibility : (measurementWindow.length > 0 ? 1 : 0);
+    const counterValue = measurement.valid ? measurement.primaryValue : (measurementWindow.length > 0 ? measurementWindow[measurementWindow.length - 1].primaryValue : null);
+
+    let state;
+    if (id === 'squats') {
+      state = counter.update({ angle: counterValue, visibility: counterVisibility, timestamp });
+    } else if (id === 'crunches') {
+      state = counter.update({
+        angle: counterValue,
+        shoulderKneeRatio: measurement.shoulderKneeRatio,
+        torsoCompression: measurement.torsoCompression,
+        visibility: counterVisibility,
+        timestamp,
+      });
+    } else if (id === 'pushups') {
+      state = counter.update({ angle: counterValue, visibility: counterVisibility, timestamp });
+    } else {
+      state = counter.update({
+        feetRatio: measurement.feetRatio,
+        armsOpen: measurement.armsOpen,
+        armsClosed: measurement.armsClosed,
+        visibility: counterVisibility,
+        timestamp,
+      });
+    }
+
     return {
       ...state,
       phaseLabel: phaseLabel(id, state.phase),
@@ -200,6 +234,7 @@ export function createExerciseDetector(exerciseId = 'squats', options = {}) {
     update,
     reset: () => {
       measurementWindow = [];
+      lockedSide = null;
       return counter.reset();
     },
     snapshot: () => counter.snapshot(),

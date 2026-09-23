@@ -163,7 +163,30 @@
 
 The cohesive homepage release is live and verified. Product logic, recommendation engine, equipment, location, and catalogue parity have been audited, simplified, fortified, and tested on `agent/gemini-product-logic-v2` (886/886 tests passing, 0 failures). Ready for integration review.
 
-## Camera Intelligence V4 (Real-World Debug Pass)
+
+## Camera Intelligence V4 (MediaPipe-only Production Hardening Pass)
+
+- **Branch:** `feature/camera-intelligence-v4`
+- **Status:** Local implementation complete, verified, and pushed. NOT MERGED, NOT DEPLOYED per instructions.
+- **Ownership:** Camera pipeline, MediaPipe backend, state machines, voice coaching race condition.
+- **MoveNet Removal:** MoveNet provider, TensorFlow backend, debug UI, and dependencies completely removed. MediaPipe is now the single production pose provider. `CoachScreen.js` bundle size was reduced by ~1.8MB (90.4% reduction).
+- **Time-based Grace Periods & Active Tracking:** Replaced all hard frame counts with time-based duration thresholds for smoothing and state stability.
+- **Side Locking:** Side is strictly locked during an active rep. Side selection only switches if not in an active rep, or if the current side is unusable for a sustained 1.2s.
+- **Exercise-Specific Readiness:** Generalized full-body readiness checks replaced with targeted upper/lower body framing rules (e.g., Push-ups no longer require ankle visibility, only upper body and hips).
+- **Crunch State Machine:** Reworked around relative motion from the user's extended position with hysteresis. Valid rep conceptually tracks EXTENDED -> FLEXING -> FLEXED -> EXTENDING -> EXTENDED -> COUNT.
+- **Push-up State Machine (NEW):** Created dedicated state machine focused on return-to-top logic, remembering bottom ROM, and returning toward an individual top baseline.
+- **Jumping Jack State Machine (NEW):** Created dedicated state machine using relative openness with a personal closed baseline (arms down, legs relatively together) and open condition.
+- **Voice Coaching Fix:** Fixed race condition where coaching updates continuously cancelled TEST VOICE. Implemented an ownership-token-based controller and `SPEECH_PRIORITY` levels (TEST: 10, REP_COUNT: 9, POSITIVE: 7, SETUP: 6, FORM: 4). `TEST VOICE` is now immune to lower-priority frame-loop cancellation. Added cancel reason/source telemetry.
+- **JSONL Trace Infrastructure:** Added `src/vision/testing/jsonlReplay.test.js` infrastructure to play real captured JSONL traces through the `exerciseDetectors`.
+- **Verification:**
+  - `npm test`: 20 suites, 970 passed, 0 failed.
+  - `npm run build`: PASS (bundle significantly smaller).
+  - `node scripts/verify-camera-coach.mjs`: PASS.
+  - `node scripts/verify-browser.mjs`: PASS.
+- **Next Steps:**
+  - Real-world physical device QA to confirm the time-based side locking and baseline-relative rep counting logic improvements.
+
+## Camera Intelligence V4 (Legacy Debug Pass)
 
 - **Branch:** `feature/camera-intelligence-v4`
 - **Ownership:** Camera pipeline, MoveNet backend, diagnostic logging, exercise readiness gating, rep logic.

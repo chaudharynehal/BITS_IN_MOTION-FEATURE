@@ -9,7 +9,6 @@ export const CRUNCH_CONFIG = Object.freeze({
   minimumCompressionRange: 0.16,
   returnRatioTolerance: 0.16,
   minVisibility: 0.58,
-  stableFrames: 4,
   stableDurationMs: 140,
   minFlexedDurationMs: 120,
   minRepDurationMs: 450,
@@ -35,7 +34,6 @@ export function createCrunchCounter(overrides = {}) {
   let phase = 'finding-start';
   let reps = 0;
   let candidate = null;
-  let candidateFrames = 0;
   let candidateSince = 0;
   let baselineAngle = null;
   let baselineShoulderKneeRatio = null;
@@ -50,7 +48,6 @@ export function createCrunchCounter(overrides = {}) {
 
   function clearCandidate() {
     candidate = null;
-    candidateFrames = 0;
     candidateSince = 0;
   }
 
@@ -169,14 +166,10 @@ export function createCrunchCounter(overrides = {}) {
 
     if (candidate !== classification) {
       candidate = classification;
-      candidateFrames = 1;
       candidateSince = timestamp;
-    } else {
-      candidateFrames += 1;
     }
 
-    const stable = candidateFrames >= config.stableFrames
-      && timestamp - candidateSince >= config.stableDurationMs;
+    const stable = timestamp - candidateSince >= config.stableDurationMs;
     if (!stable) return { reps, phase, event: null, classification };
 
     let event = null;

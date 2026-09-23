@@ -40,7 +40,7 @@ function bestSide(landmarks, keys, preferredSide = null, preferenceThreshold = 0
 
   if (preferredSide) {
     const preferred = scores.find(s => s.side === preferredSide);
-    if (preferred && preferred.visibility >= preferenceThreshold) {
+    if (preferred && (preferenceThreshold === 0 || preferred.visibility >= preferenceThreshold)) {
       return preferred;
     }
   }
@@ -107,18 +107,23 @@ export function measureSquat(input, minVisibility = 0.6, preferredSide = null) {
   };
 }
 
-export function measurePushup(input, minVisibility = 0.55, preferredSide = null) {
+export function measurePushup(input, minVisibility = 0.55, preferredSide = null, preferenceThreshold = 0.45) {
   const { landmarks, frameBrightness } = poseInput(input);
-  const side = bestSide(landmarks, ['shoulder', 'elbow', 'wrist', 'hip', 'ankle'], preferredSide);
+  // Do not require ankle visibility for pushups
+  const side = bestSide(landmarks, ['shoulder', 'elbow', 'hip', 'wrist'], preferredSide, preferenceThreshold);
   const points = side.indexes;
   const elbowAngle = calculateAngle(landmarks?.[points.shoulder], landmarks?.[points.elbow], landmarks?.[points.wrist]);
-  const bodyAngle = calculateAngle(landmarks?.[points.shoulder], landmarks?.[points.hip], landmarks?.[points.ankle]);
+  // Body angle is nice if we have ankle, but fallback to just upper body readiness if not
+  let bodyAngle = null;
+  if (landmarks?.[points.ankle]) {
+    bodyAngle = calculateAngle(landmarks?.[points.shoulder], landmarks?.[points.hip], landmarks?.[points.ankle]);
+  }
   const framingReason = framingForPoints(
-    [landmarks?.[points.shoulder], landmarks?.[points.hip], landmarks?.[points.ankle]],
-    { floor: true, frameBrightness, requiredReason: 'full-body' },
+    [landmarks?.[points.shoulder], landmarks?.[points.elbow], landmarks?.[points.hip]],
+    { floor: true, frameBrightness, requiredReason: 'key-joints', minSpan: 0.20 },
   );
   return {
-    valid: side.visibility >= minVisibility && elbowAngle !== null && bodyAngle !== null && bodyAngle >= 150 && framingReason === 'ready',
+    valid: side.visibility >= minVisibility && elbowAngle !== null && framingReason === 'ready' && (bodyAngle === null || bodyAngle >= 140),
     visibility: side.visibility,
     side: side.side,
     primaryValue: elbowAngle,
@@ -129,9 +134,9 @@ export function measurePushup(input, minVisibility = 0.55, preferredSide = null)
   };
 }
 
-export function measureCrunch(input, minVisibility = 0.55, preferredSide = null) {
+export function measureCrunch(input, minVisibility = 0.55, preferredSide = null, preferenceThreshold = 0.45) {
   const { landmarks, worldLandmarks, frameBrightness } = poseInput(input);
-  const side = bestSide(landmarks, ['shoulder', 'hip', 'knee'], preferredSide);
+  const side = bestSide(landmarks, ['shoulder', 'hip', 'knee'], preferredSide, preferenceThreshold);
   const points = side.indexes;
   const shoulder = landmarks?.[points.shoulder];
   const hip = landmarks?.[points.hip];
@@ -197,9 +202,8 @@ export function measureJumpingJack(input, minVisibility = 0.55) {
 }
 
 export function measureExercise(exerciseId, input, options = {}) {
-  if (exerciseId === 'pushups') return measurePushup(input, options.minVisibility || 0.55, options.preferredSide);
-  if (exerciseId === 'crunches') return measureCrunch(input, options.minVisibility || 0.55, options.preferredSide);
+  if (exerciseId === 'pushups') return measurePushup(input, options.minVisibility || 0.55, options.preferredSide, options.preferenceThreshold);
+  if (exerciseId === 'crunches') return measureCrunch(input, options.minVisibility || 0.55, options.preferredSide, options.preferenceThreshold);
   if (exerciseId === 'jumping-jacks') return measureJumpingJack(input);
-  // measureSquat doesn't use bestSide directly, but angle.js getBestKneeMeasurement could be modified later if needed. For now just pass minVisibility.
   return measureSquat(input, options.minVisibility || 0.6, options.preferredSide);
 }

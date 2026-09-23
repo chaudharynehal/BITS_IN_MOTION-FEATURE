@@ -2,18 +2,32 @@ export const VOICE_STORAGE_KEY = 'bits-motion-voice-coach';
 
 export const VOICE_CUES = Object.freeze({
   ready: 'Ready.',
-  'no-person': 'Step into frame.',
-  'move-farther': 'Move a little farther back.',
-  'move-closer': 'Move a little closer.',
-  'full-body': 'Keep your full body in frame.',
-  'key-joints': 'Keep the key joints visible.',
-  'adjust-angle': 'Adjust the camera angle.',
-  'improve-lighting': 'Improve the lighting.',
-  'overhead-room': 'Leave overhead room.',
+  'no-person': 'Step into view.',
+  'move-farther': 'Move back.',
+  'move-closer': 'Move closer.',
+  'full-body': 'Full body in frame.',
+  'key-joints': 'Keep joints visible.',
+  'adjust-angle': 'Adjust camera angle.',
+  'improve-lighting': 'Improve lighting.',
+  'overhead-room': 'More overhead room.',
   lower: 'Go lower.',
-  'curl-more': 'Curl a little further.',
-  'body-line': 'Straighten your body line.',
+  'curl-more': 'Curl further.',
+  'body-line': 'Straighten your body.',
   wider: 'Open wider.',
+  'good-depth': 'Good depth.',
+  'great-rep': 'Good rep.',
+  'press-up': 'Press back up.',
+  return: 'Return with control.',
+  close: 'Return to center.',
+});
+
+/** Speech priority levels */
+export const SPEECH_PRIORITY = Object.freeze({
+  SETUP: 6,       // readiness / framing
+  REP_COUNT: 9,   // rep completion
+  FORM: 4,        // form corrections
+  POSITIVE: 7,    // positive form feedback (good depth, good rep)
+  TEST: 10,       // manual test voice (highest)
 });
 
 const NUMBER_WORDS = [
@@ -66,6 +80,13 @@ export function savedVoicePreference(windowRef = globalThis.window) {
   }
 }
 
+/**
+ * Voice controller with ownership-token-based cancellation protection.
+ *
+ * Each utterance gets a unique generation token. Only a higher-priority or
+ * explicit cancel can terminate the current utterance. The cancel reason
+ * and source are always tracked for telemetry.
+ */
 export function createVoiceController({
   windowRef = globalThis.window,
   clock = () => performance.now(),
@@ -75,9 +96,13 @@ export function createVoiceController({
   const supported = () => isSpeechSupported(windowRef);
   let lastSpokenCue = '';
   let lastSpokenAt = -Infinity;
+  let lastPriority = 0;
   let voices = null;
   let disposed = false;
   let previousVoicesChanged = null;
+  let utteranceGeneration = 0;  // monotonically increasing ownership token
+  let activeGeneration = 0;     // generation of the currently speaking utterance
+  let activePriority = 0;       // priority of the currently speaking utterance
 
   let debugData = {
     supported: supported(),
@@ -94,6 +119,10 @@ export function createVoiceController({
     lastEndAt: 0,
     lastErrorText: '',
     lastErrorAt: 0,
+    lastCancelReason: '',
+    lastCancelSource: '',
+    lastCancelAt: 0,
+    utteranceId: 0,
   };
 
   const speech = () => windowRef?.speechSynthesis;
@@ -112,6 +141,7 @@ export function createVoiceController({
       debugData.selectedVoiceLang = voice.lang;
     }
     debugData.voicesLoaded = cachedVoices().length;
+    debugData.utteranceId = utteranceGeneration;
     onTelemetry({ ...debugData });
   }
 
@@ -159,8 +189,18 @@ export function createVoiceController({
     }
   }
 
-  function cancel() {
+  /**
+   * Cancel current speech with a tracked reason and source.
+   * @param {string} reason - why the cancellation happened
+   * @param {string} source - which code path triggered it
+   */
+  function cancel(reason = 'explicit', source = 'unknown') {
     if (!supported()) return;
+    debugData.lastCancelReason = reason;
+    debugData.lastCancelSource = source;
+    debugData.lastCancelAt = clock();
+    activeGeneration = 0;
+    activePriority = 0;
     try {
       speech().cancel();
       emitTelemetry();
@@ -169,51 +209,94 @@ export function createVoiceController({
     }
   }
 
-  function directTestSpeak(message) {
-    if (disposed || !supported() || !message) return false;
+  /**
+   * Internal: create and speak an utterance with ownership tracking.
+   * @returns {number} the generation token of the utterance
+   */
+  function _doSpeak(message, priority, voiceMode = 'coach') {
+    const gen = ++utteranceGeneration;
     try {
-      cancel();
+      // Only cancel if we're replacing a lower-priority utterance
+      if (activePriority > 0 && activePriority < priority) {
+        cancel(`preempted by priority ${priority}`, 'speak-preempt');
+      } else if (activePriority > 0) {
+        cancel('new utterance', 'speak-replace');
+      }
+
       const utterance = new windowRef.SpeechSynthesisUtterance(message);
-      const voice = selectCoachVoice(cachedVoices());
-      if (voice) {
-        utterance.voice = voice;
-        utterance.lang = voice.lang;
+      if (voiceMode === 'coach') {
+        const voice = selectCoachVoice(cachedVoices());
+        if (voice) {
+          utterance.voice = voice;
+          utterance.lang = voice.lang;
+        }
       }
       utterance.rate = 0.98;
       utterance.pitch = 1;
       utterance.volume = 0.9;
 
       utterance.onstart = () => {
-        debugData.lastStartText = message;
-        debugData.lastStartAt = clock();
-        emitTelemetry();
+        if (activeGeneration === gen) {
+          debugData.lastStartText = message;
+          debugData.lastStartAt = clock();
+          emitTelemetry();
+        }
       };
       utterance.onend = () => {
-        debugData.lastEndText = message;
-        debugData.lastEndAt = clock();
-        emitTelemetry();
+        if (activeGeneration === gen) {
+          debugData.lastEndText = message;
+          debugData.lastEndAt = clock();
+          activeGeneration = 0;
+          activePriority = 0;
+          emitTelemetry();
+        }
       };
       utterance.onerror = (e) => {
         debugData.lastErrorText = `Error [${e.error}]: ${message}`;
         debugData.lastErrorAt = clock();
+        if (activeGeneration === gen) {
+          activeGeneration = 0;
+          activePriority = 0;
+        }
         emitTelemetry();
       };
 
+      activeGeneration = gen;
+      activePriority = priority;
       debugData.lastRequested = message;
       speech().speak(utterance);
       emitTelemetry();
-      return true;
+      return gen;
     } catch (e) {
       debugData.lastErrorText = `Throw: ${e.message}`;
       debugData.lastErrorAt = clock();
       emitTelemetry();
-      return false;
+      return 0;
     }
   }
 
-  function speak(message, { enabled = true, force = false, priority = 4 } = {}) {
+  /**
+   * Direct test speak - highest priority, immune to coaching cancellation.
+   * @param {string} message
+   * @param {string} [voiceMode] - 'auto' uses default browser voice, otherwise uses coach voice
+   * @returns {boolean}
+   */
+  function directTestSpeak(message, voiceMode = 'coach') {
+    if (disposed || !supported() || !message) return false;
+    const gen = _doSpeak(message, SPEECH_PRIORITY.TEST, voiceMode);
+    return gen > 0;
+  }
+
+  /**
+   * Speak a coaching cue. Respects throttling and priority.
+   * Will NOT cancel a higher-priority utterance (e.g., TEST VOICE).
+   */
+  function speak(message, { enabled = true, force = false, priority = SPEECH_PRIORITY.FORM } = {}) {
     if (disposed || !enabled || !supported() || !message) return false;
     const now = clock();
+
+    // Never cancel a higher-priority utterance
+    if (activePriority > priority && activeGeneration > 0) return false;
 
     if (!force && (message === lastSpokenCue || now - lastSpokenAt < throttleMs)) return false;
 
@@ -221,10 +304,9 @@ export function createVoiceController({
     lastSpokenAt = now;
     lastPriority = priority;
 
-    return directTestSpeak(message);
+    return _doSpeak(message, priority) > 0;
   }
 
-  let lastPriority = 0;
   function resetThrottle() {
     lastSpokenCue = '';
     lastSpokenAt = -Infinity;
@@ -234,14 +316,14 @@ export function createVoiceController({
   function dispose() {
     disposed = true;
     detachVoicesChanged();
-    cancel();
+    cancel('dispose', 'controller-dispose');
   }
 
   refreshVoices();
   attachVoicesChanged();
 
   return {
-    cancel,
+    cancel: (reason, source) => cancel(reason || 'explicit', source || 'external'),
     dispose,
     refreshVoices,
     resetThrottle,
@@ -249,6 +331,6 @@ export function createVoiceController({
     speak,
     directTestSpeak,
     supported,
-    snapshot: () => ({ lastSpokenCue, lastSpokenAt, voiceCount: cachedVoices().length, disposed }),
+    snapshot: () => ({ lastSpokenCue, lastSpokenAt, voiceCount: cachedVoices().length, disposed, activeGeneration, activePriority }),
   };
 }

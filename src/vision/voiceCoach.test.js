@@ -4,6 +4,7 @@ import {
   repVoiceMessage,
   savedVoicePreference,
   selectCoachVoice,
+  SPEECH_PRIORITY,
 } from './voiceCoach';
 
 class FakeUtterance {
@@ -30,6 +31,9 @@ function fakeWindow({ voices = [], storageValue = 'true' } = {}) {
     dispatch(event) {
       listeners[event]?.();
     },
+    pending: false,
+    speaking: false,
+    paused: false,
   };
   return {
     SpeechSynthesisUtterance: FakeUtterance,
@@ -64,7 +68,6 @@ describe('voice coach', () => {
     const controller = createVoiceController({ windowRef: win, clock: () => now });
 
     expect(controller.speak('Good rep.', { enabled: true })).toBe(true);
-    expect(win.speechSynthesis.cancel).toHaveBeenCalledOnce();
     expect(win.speechSynthesis.speak).toHaveBeenCalledOnce();
     expect(win.speechSynthesis.speak.mock.calls[0][0]).toMatchObject({
       text: 'Good rep.',
@@ -123,5 +126,78 @@ describe('voice coach', () => {
     expect(savedVoicePreference(fakeWindow({ storageValue: 'true' }))).toBe(true);
     expect(savedVoicePreference(fakeWindow({ storageValue: 'false' }))).toBe(false);
     expect(savedVoicePreference({ localStorage: { getItem: () => 'true' } })).toBe(false);
+  });
+
+  describe('speech cancellation protection', () => {
+    it('TEST VOICE is not cancelled by lower-priority coaching cue', () => {
+      let now = 1000;
+      const win = fakeWindow({ voices: [{ name: 'Natural India', lang: 'en-IN' }] });
+      const controller = createVoiceController({ windowRef: win, clock: () => now });
+
+      // User clicks TEST VOICE
+      expect(controller.directTestSpeak('Voice test successful.')).toBe(true);
+      const testGen = controller.snapshot().activeGeneration;
+      expect(testGen).toBeGreaterThan(0);
+
+      // Pose frame immediately updates with a coaching cue
+      now += 50;
+      const spoken = controller.speak('Step into view.', { enabled: true, priority: SPEECH_PRIORITY.SETUP });
+
+      // The coaching cue should NOT have been spoken because TEST has higher priority
+      expect(spoken).toBe(false);
+      // The test utterance should still be the active one
+      expect(controller.snapshot().activeGeneration).toBe(testGen);
+    });
+
+    it('cancel tracks reason and source', () => {
+      let now = 1000;
+      let lastTelemetry = {};
+      const win = fakeWindow();
+      const controller = createVoiceController({
+        windowRef: win,
+        clock: () => now,
+        onTelemetry: (t) => { lastTelemetry = t; },
+      });
+
+      controller.cancel('voice-off', 'toggle-button');
+      expect(lastTelemetry.lastCancelReason).toBe('voice-off');
+      expect(lastTelemetry.lastCancelSource).toBe('toggle-button');
+    });
+
+    it('higher-priority cue can preempt lower-priority speech', () => {
+      let now = 1000;
+      const win = fakeWindow({ voices: [{ name: 'Test', lang: 'en-US' }] });
+      const controller = createVoiceController({ windowRef: win, clock: () => now });
+
+      // Start a low-priority coaching cue
+      controller.speak('Go lower.', { enabled: true, priority: SPEECH_PRIORITY.FORM });
+      const firstGen = controller.snapshot().activeGeneration;
+
+      // Higher priority rep count arrives
+      now += 100;
+      controller.speak('Three.', { enabled: true, force: true, priority: SPEECH_PRIORITY.REP_COUNT });
+
+      // The rep count should have replaced the coaching cue
+      expect(controller.snapshot().activeGeneration).toBeGreaterThan(firstGen);
+      expect(win.speechSynthesis.cancel).toHaveBeenCalled();
+    });
+
+    it('Voice ON click is not cancelled by subsequent pose frame', () => {
+      let now = 1000;
+      const win = fakeWindow({ voices: [{ name: 'Test', lang: 'en-US' }] });
+      const controller = createVoiceController({ windowRef: win, clock: () => now });
+
+      // Voice toggle ON speaks the announcement
+      controller.speak('Voice coach on.', { enabled: true, force: true, priority: SPEECH_PRIORITY.POSITIVE });
+      const onGen = controller.snapshot().activeGeneration;
+
+      // Immediate pose frame with readiness change
+      now += 30;
+      const interrupted = controller.speak('Step into view.', { enabled: true, priority: SPEECH_PRIORITY.SETUP });
+
+      // Setup cue (priority 6) should NOT preempt positive (priority 7)
+      expect(interrupted).toBe(false);
+      expect(controller.snapshot().activeGeneration).toBe(onGen);
+    });
   });
 });

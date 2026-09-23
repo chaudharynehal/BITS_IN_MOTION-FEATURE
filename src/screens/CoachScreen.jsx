@@ -6,7 +6,7 @@ import { createPoseProvider } from '../vision/poseProvider';
 import { createExerciseDetector, DETECTOR_CONFIGS } from '../vision/exerciseDetectors';
 import { createSubjectTracker } from '../vision/subjectContinuity';
 import { createVideoBrightnessSampler } from '../vision/frameReadiness';
-import { VOICE_CUES, VOICE_STORAGE_KEY, createVoiceController, repVoiceMessage, savedVoicePreference } from '../vision/voiceCoach';
+import { VOICE_CUES, VOICE_STORAGE_KEY, SPEECH_PRIORITY, createVoiceController, repVoiceMessage, savedVoicePreference } from '../vision/voiceCoach';
 
 const INITIAL_FEEDBACK = { key: 'initial', message: 'Keep your full body visible and follow the setup guide', tone: 'neutral', priority: 0, until: 0 };
 
@@ -57,13 +57,12 @@ export default function CoachScreen({
   // Developer mode backend selection
   const debugParams = new URLSearchParams(window.location.search);
   const isDebugMode = debugParams.get('cameraDebug') === '1';
-  const [poseBackend, setPoseBackend] = useState(isDebugMode ? (debugParams.get('backend') || 'mediapipe') : 'mediapipe');
+  const poseBackend = 'mediapipe';
   const lastLatenciesRef = useRef([]);
   const [diagnosticData, setDiagnosticData] = useState({ fps: 0, latency: 0 });
   const [isCapturing, setIsCapturing] = useState(false);
 
   const [modelStatus, setModelStatus] = useState('loading');
-  const [movenetStatus, setMovenetStatus] = useState({ status: 'NOT_REQUESTED', error: null });
   const [modelNote, setModelNote] = useState('Loading the lightweight pose model…');
   const [cameraStatus, setCameraStatus] = useState('idle');
   const [cameraError, setCameraError] = useState('');
@@ -84,8 +83,8 @@ export default function CoachScreen({
     if (previewSummary) summaryRef.current?.showModal();
   }, [previewSummary]);
 
-  const speakCue = useCallback((message, { force = false } = {}) => {
-    voiceControllerRef.current?.speak(message, { enabled: voiceEnabled && speechSupported, force });
+  const speakCue = useCallback((message, { force = false, priority = SPEECH_PRIORITY.FORM } = {}) => {
+    voiceControllerRef.current?.speak(message, { enabled: voiceEnabled && speechSupported, force, priority });
   }, [speechSupported, voiceEnabled]);
 
   const publishFeedback = useCallback((cue) => {
@@ -134,7 +133,7 @@ export default function CoachScreen({
     lastMeasurementRef.current = null;
     lastSpokenRepRef.current = 0;
     voiceControllerRef.current?.resetThrottle();
-    voiceControllerRef.current?.cancel();
+    voiceControllerRef.current?.cancel('exercise-change', 'exercise-effect');
     feedbackRef.current = INITIAL_FEEDBACK;
     lastUiStateRef.current = { at: 0, reps: 0, stage: 'Finding start', measurementValue: null, measurementUnit: exerciseId === 'jumping-jacks' ? '×' : '°' };
     setReps(0);
@@ -143,19 +142,17 @@ export default function CoachScreen({
     setMeasurementUnit(exerciseId === 'jumping-jacks' ? '×' : '°');
     setFeedback(INITIAL_FEEDBACK);
     setPreviewSummary(null);
-  }, [exerciseId, poseBackend]);
+  }, [exerciseId]);
 
   const loadModel = useCallback(async () => {
     const request = ++modelRequestRef.current;
     landmarkerRef.current?.close();
     landmarkerRef.current = null;
     setModelStatus('loading');
-    setModelNote(`Loading the ${poseBackend === 'movenet' ? 'MoveNet Thunder' : 'MediaPipe'} pose model…`);
+    setModelNote('Loading the MediaPipe pose model…');
     try {
-      const provider = await createPoseProvider(poseBackend, () => {
+      const provider = await createPoseProvider('mediapipe', () => {
         if (mountedRef.current) setModelNote('GPU unavailable—switching to compatible CPU mode…');
-      }, (statusUpdate) => {
-        if (mountedRef.current) setMovenetStatus(statusUpdate);
       });
       if (!mountedRef.current || modelRequestRef.current !== request) {
         provider.close();
@@ -171,7 +168,7 @@ export default function CoachScreen({
         setModelNote('The pose model could not load. Check the connection and try again.');
       }
     }
-  }, [poseBackend]);
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -252,7 +249,6 @@ export default function CoachScreen({
             captureDataRef.current.push({
               timestamp: now,
               exercise: exerciseId,
-              poseBackend,
               visibility: measurement.valid ? measurement.visibility : 0,
               angles: measurement,
               movementPhase: state.phaseLabel,
@@ -310,7 +306,7 @@ export default function CoachScreen({
     }
 
     animationRef.current = requestAnimationFrame(processFrame);
-  }, [publishFeedback, speakCue, isDebugMode, isCapturing, exerciseId, poseBackend]);
+  }, [publishFeedback, speakCue, isDebugMode, isCapturing, exerciseId]);
 
   function releaseTrackEndListeners() {
     trackEndCleanupRef.current?.();
@@ -328,7 +324,7 @@ export default function CoachScreen({
     clearPoseOverlay(canvasRef.current);
     setCameraStatus('error');
     setCameraError('The camera stopped unexpectedly. Check your camera and try again.');
-    voiceControllerRef.current?.cancel();
+    voiceControllerRef.current?.cancel('camera-track-ended', 'track-end-handler');
   }
 
   function watchStreamEnd(stream) {
@@ -388,7 +384,7 @@ export default function CoachScreen({
     brightnessSamplerRef.current.reset();
     clearPoseOverlay(canvasRef.current);
     setCameraStatus('idle');
-    voiceControllerRef.current?.cancel();
+    voiceControllerRef.current?.cancel('session-stop', 'stopSessionCamera');
   }
 
   function handleReset() {
@@ -404,7 +400,7 @@ export default function CoachScreen({
     lastMeasurementRef.current = null;
     lastSpokenRepRef.current = 0;
     voiceControllerRef.current?.resetThrottle();
-    voiceControllerRef.current?.cancel();
+    voiceControllerRef.current?.cancel('user-reset', 'handleReset');
     const next = { ...INITIAL_FEEDBACK, until: performance.now() + 700 };
     feedbackRef.current = next;
     setFeedback(next);
@@ -506,7 +502,6 @@ export default function CoachScreen({
   function copyDiagnostics() {
     const data = {
       timestamp: new Date().toISOString(),
-      poseBackend,
       exercise: exerciseId,
       fps: diagnosticData.fps,
       inferenceLatency: diagnosticData.latency,
@@ -519,7 +514,6 @@ export default function CoachScreen({
       lastRejection: diagnosticData.lastRejection,
       smoothedAngle: measurementValue,
       rawAngle: diagnosticData.rawAngle,
-      movenetStatus,
       speechTelemetry: voiceTelemetry,
     };
     navigator.clipboard.writeText(JSON.stringify(data, null, 2)).catch(console.error);
@@ -531,13 +525,7 @@ export default function CoachScreen({
       {isDebugMode && (
         <div className="debug-panel" style={{ background: '#000', color: '#0f0', padding: '10px', fontSize: '12px', fontFamily: 'monospace', position: 'fixed', top: 0, left: 0, zIndex: 9999 }}>
           <div><strong>DEBUG MODE</strong></div>
-          <div>
-            Backend:
-            <select value={poseBackend} onChange={(e) => setPoseBackend(e.target.value)} style={{ background: '#333', color: '#0f0', marginLeft: '5px' }}>
-              <option value="mediapipe">MediaPipe</option>
-              <option value="movenet">MoveNet Thunder</option>
-            </select>
-          </div>
+          <div>Backend: MediaPipe (only)</div>
           <div>FPS: {diagnosticData.fps} | Latency: {diagnosticData.latency}ms</div>
           <div>Pose Detected: {diagnosticData.poseDetected ? 'YES' : 'NO'} | Side: {diagnosticData.side}</div>
           <div>Exercise: {exerciseId} | Phase: {stage}</div>
@@ -546,10 +534,6 @@ export default function CoachScreen({
           <div>Visible Cue: {feedback.message}</div>
           <div>Last Transition: {diagnosticData.lastTransition || 'None'}</div>
           {diagnosticData.lastRejection && <div style={{ color: '#f00' }}>Last Rejection: {diagnosticData.lastRejection}</div>}
-
-          {poseBackend === 'movenet' && (
-            <div>MoveNet Status: {movenetStatus.status} {movenetStatus.error ? `(${movenetStatus.error})` : ''}</div>
-          )}
 
           <div style={{ marginTop: '5px', borderTop: '1px solid #0f0', paddingTop: '5px' }}>
             <div><strong>VOICE DEBUG</strong></div>
@@ -560,7 +544,10 @@ export default function CoachScreen({
             <div>Last Start: {voiceTelemetry.lastStartText}</div>
             <div>Last End: {voiceTelemetry.lastEndText}</div>
             {voiceTelemetry.lastErrorText && <div style={{ color: '#f00' }}>Error: {voiceTelemetry.lastErrorText}</div>}
+            {voiceTelemetry.lastCancelReason && <div style={{ color: '#ff0' }}>Cancel: {voiceTelemetry.lastCancelReason} (src: {voiceTelemetry.lastCancelSource})</div>}
+            <div>Utterance ID: {voiceTelemetry.utteranceId || 0}</div>
             <button onClick={() => voiceControllerRef.current?.directTestSpeak('Voice test successful.')} style={{ background: '#333', color: '#0f0', border: '1px solid #0f0', marginTop: '5px', padding: '2px 5px' }}>TEST VOICE</button>
+            <button onClick={() => voiceControllerRef.current?.directTestSpeak('Testing default voice.', 'auto')} style={{ background: '#333', color: '#0f0', border: '1px solid #0f0', marginTop: '5px', marginLeft: '5px', padding: '2px 5px' }}>TEST DEFAULT</button>
           </div>
 
           <button onClick={copyDiagnostics} style={{ background: '#333', color: '#0f0', border: '1px solid #0f0', marginTop: '5px', padding: '2px 5px' }}>Copy Diagnostics</button>
@@ -607,7 +594,7 @@ export default function CoachScreen({
               setVoiceEnabled(next);
               try { window.localStorage.setItem(VOICE_STORAGE_KEY, String(next)); } catch {}
               if (!next && speechSupported) {
-                voiceControllerRef.current?.cancel();
+                voiceControllerRef.current?.cancel('voice-off', 'toggle-button');
               } else if (next && speechSupported) {
                 voiceControllerRef.current?.speak('Voice coach on.', { enabled: true, force: true });
               }
