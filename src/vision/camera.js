@@ -33,9 +33,10 @@ export async function startCamera(videoElement, { signal } = {}) {
 
   const stream = await navigator.mediaDevices.getUserMedia({
     video: {
-      facingMode: 'user',
+      facingMode: { ideal: 'user' },
       width: { ideal: 1280 },
       height: { ideal: 720 },
+      aspectRatio: { ideal: 16 / 9 },
     },
     audio: false,
   });
@@ -46,6 +47,7 @@ export async function startCamera(videoElement, { signal } = {}) {
     signal?.addEventListener('abort', cancel, { once: true });
     videoElement.srcObject = stream;
     videoElement.playsInline = true;
+    videoElement.autoplay = true;
     videoElement.muted = true;
     await videoElement.play();
     if (signal?.aborted) throw new DOMException('Camera request cancelled.', 'AbortError');
