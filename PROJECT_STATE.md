@@ -162,3 +162,21 @@
 ## Safe continuation point
 
 The cohesive homepage release is live and verified. Product logic, recommendation engine, equipment, location, and catalogue parity have been audited, simplified, fortified, and tested on `agent/gemini-product-logic-v2` (886/886 tests passing, 0 failures). Ready for integration review.
+
+## Camera Intelligence V4 (Real-World Debug Pass)
+
+- **Branch:** `feature/camera-intelligence-v4`
+- **Ownership:** Camera pipeline, MoveNet backend, diagnostic logging, exercise readiness gating, rep logic.
+- **Changes made:**
+  - **MoveNet Fixes**: Fixed `SINGLEPOSE_THUNDER` model type bug that prevented MoveNet from loading. Added detailed developer state updates (`LOADING_TF`, `LOADING_MODEL`, `WAITING_FOR_VIDEO`, `INFERENCE_ACTIVE`).
+  - **Voice Fixes**: Exposed exact speech API telemetry to debug UI (supported, loaded, pending, paused, speaking, last event). Created a direct `TEST VOICE` button bypassing React effects for platform validation.
+  - **Readiness Hysteresis (Acquisition vs Active)**: Modified `exerciseMeasurements.js` and `angle.js` to stabilize selected side dynamically if it remains above a preference threshold, preventing angle jumps from side swapping.
+  - **Crunch Rep Fix**: Changed `crunchStateMachine.js` baseline logic to not strictly require an arbitrary extended angle (e.g., 138°), instead establishing baseline from stable posture (>=115°). 
+  - **Push-up Rep Fix**: Relaxed `cycleStateMachine.js` to accept faster push-up transitions (200ms vs 350ms) to prevent dropped counts on rapid real-world reps.
+  - **Diagnostics UI**: Enhanced `CoachScreen.jsx` to log and copy bounded transition history (`lastTransition`, `lastRejection`), exact `rawAngle` vs `smoothedAngle` diagnostics, and exact `movenetStatus`.
+- **Verification:**
+  - `npm test`: **19 suites, 965 passed, 0 failed**.
+  - `npm run build`: PASS.
+  - `node scripts/verify-camera-coach.mjs`: PASS.
+- **Next Steps:**
+  - Physical real-world validation of the fixed constraints for Push-ups and Crunches, and verifying MoveNet Thunder inference reliability.
