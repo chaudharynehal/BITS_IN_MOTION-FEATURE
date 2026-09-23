@@ -1,187 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 import {
-  Activity,
   ArrowRight,
   Camera,
-  CheckCircle2,
   ChevronRight,
+  Clock3,
   Dumbbell,
+  Menu,
   ScanLine,
   ShieldCheck,
-  Sparkles,
   UserRound,
+  X,
   Zap,
-} from 'lucide-react';
-import GoogleSignInButton from '../components/GoogleSignInButton';
-import UserMenu from '../components/UserMenu';
+} from "lucide-react";
+import GoogleSignInButton from "../components/GoogleSignInButton";
+import UserMenu from "../components/UserMenu";
+import HomeCoachPreview from "../components/HomeCoachPreview";
+import "../styles/homepage.css";
 
-const SQUAT_PHASES = [
-  {
-    key: 'standing', label: 'Standing', angle: 171, cue: 'Ready — lower with control', rep: 12,
-    points: [[170, 48], [170, 76], [170, 98], [142, 94], [198, 94], [126, 137], [214, 137], [116, 176], [224, 176], [170, 166], [153, 164], [187, 164], [151, 222], [189, 222], [149, 281], [191, 281]],
-  },
-  {
-    key: 'descending', label: 'Descending', angle: 132, cue: 'Control the descent', rep: 12,
-    points: [[180, 58], [177, 85], [172, 108], [145, 104], [199, 108], [122, 139], [219, 143], [105, 169], [235, 173], [170, 183], [153, 181], [187, 184], [136, 226], [204, 228], [116, 281], [224, 281]],
-  },
-  {
-    key: 'depth', label: 'Squat depth', angle: 91, cue: 'Good depth — drive back up', rep: 12,
-    points: [[190, 76], [184, 102], [174, 124], [148, 118], [199, 126], [122, 141], [221, 148], [98, 157], [243, 164], [167, 207], [150, 203], [184, 210], [123, 224], [213, 229], [98, 280], [243, 280]],
-  },
-  {
-    key: 'ascending', label: 'Ascending', angle: 133, cue: 'Stand tall to finish the rep', rep: 12,
-    points: [[180, 58], [177, 85], [172, 108], [145, 104], [199, 108], [122, 139], [219, 143], [105, 169], [235, 173], [170, 183], [153, 181], [187, 184], [136, 226], [204, 228], [116, 281], [224, 281]],
-  },
-  {
-    key: 'complete', label: 'Rep complete', angle: 171, cue: 'Rep complete — strong control', rep: 13,
-    points: [[170, 48], [170, 76], [170, 98], [142, 94], [198, 94], [126, 137], [214, 137], [116, 176], [224, 176], [170, 166], [153, 164], [187, 164], [151, 222], [189, 222], [149, 281], [191, 281]],
-  },
-];
-
-function CameraCoachPreview({ onTryCoach }) {
-  const [phaseIndex, setPhaseIndex] = useState(0);
-  const [reducedMotion, setReducedMotion] = useState(() => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => setReducedMotion(media.matches);
-    media.addEventListener?.('change', update);
-    return () => media.removeEventListener?.('change', update);
-  }, []);
-
-  useEffect(() => {
-    if (reducedMotion) {
-      setPhaseIndex(2);
-      return undefined;
-    }
-    const duration = phaseIndex === 0 || phaseIndex === 2 || phaseIndex === 4 ? 900 : 720;
-    const timer = window.setTimeout(() => setPhaseIndex((current) => (current + 1) % SQUAT_PHASES.length), duration);
-    return () => window.clearTimeout(timer);
-  }, [phaseIndex, reducedMotion]);
-
-  const phase = SQUAT_PHASES[phaseIndex];
-  const p = phase.points;
-  const limbPath = `M${p[3][0]} ${p[3][1]}L${p[5][0]} ${p[5][1]}L${p[7][0]} ${p[7][1]}M${p[4][0]} ${p[4][1]}L${p[6][0]} ${p[6][1]}L${p[8][0]} ${p[8][1]}M${p[10][0]} ${p[10][1]}L${p[12][0]} ${p[12][1]}L${p[14][0]} ${p[14][1]}M${p[11][0]} ${p[11][1]}L${p[13][0]} ${p[13][1]}L${p[15][0]} ${p[15][1]}`;
-  const skeletonPath = `M${p[1][0]} ${p[1][1]}L${p[2][0]} ${p[2][1]}L${p[9][0]} ${p[9][1]}M${p[3][0]} ${p[3][1]}L${p[2][0]} ${p[2][1]}L${p[4][0]} ${p[4][1]}M${p[3][0]} ${p[3][1]}L${p[5][0]} ${p[5][1]}L${p[7][0]} ${p[7][1]}M${p[4][0]} ${p[4][1]}L${p[6][0]} ${p[6][1]}L${p[8][0]} ${p[8][1]}M${p[10][0]} ${p[10][1]}L${p[12][0]} ${p[12][1]}L${p[14][0]} ${p[14][1]}M${p[11][0]} ${p[11][1]}L${p[13][0]} ${p[13][1]}L${p[15][0]} ${p[15][1]}`;
-  const torsoPath = `M${p[3][0]} ${p[3][1]}Q${p[2][0]} ${p[2][1] - 8} ${p[4][0]} ${p[4][1]}L${p[11][0]} ${p[11][1]}Q${p[9][0]} ${p[9][1] + 8} ${p[10][0]} ${p[10][1]}Z`;
-
-  return (
-    <div className="product-visual">
-      <span className="visual-orbit visual-orbit-one" aria-hidden="true" />
-      <span className="visual-orbit visual-orbit-two" aria-hidden="true" />
-
-      <article className="visual-camera-card" aria-label="Animated Camera Coach illustration tracking a complete squat">
-        <div className="visual-card-top">
-          <div className="camera-live-tag">
-            <i className="camera-live-dot" /> Live motion intelligence
-          </div>
-          <span className="camera-privacy-tag"><ShieldCheck size={13} /> Processed on your device</span>
-        </div>
-
-        <div className="visual-viewfinder">
-          <div className="motion-grid" aria-hidden="true" />
-          <div className="motion-halo" aria-hidden="true" />
-          <div className="viewfinder-scanline" aria-hidden="true" />
-          <span className="viewfinder-bracket top-left" aria-hidden="true" />
-          <span className="viewfinder-bracket top-right" aria-hidden="true" />
-          <span className="viewfinder-bracket bottom-left" aria-hidden="true" />
-          <span className="viewfinder-bracket bottom-right" aria-hidden="true" />
-
-          <div className="motion-stage-copy">
-            <small>AI form coach</small>
-            <strong>Squat analysis</strong>
-          </div>
-
-          <svg
-            viewBox="0 0 340 310"
-            className={`visual-pose-svg squat-phase-${phase.key}`}
-            role="img"
-            aria-label={`Squat animation: ${phase.label}, knee angle ${phase.angle} degrees`}
-          >
-            <defs>
-              <linearGradient id="pose-line-grad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#20e1be" />
-                <stop offset="100%" stopColor="#3d91ff" />
-              </linearGradient>
-              <linearGradient id="angle-arc-grad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#ffd765" />
-                <stop offset="100%" stopColor="#ff9f43" />
-              </linearGradient>
-              <radialGradient id="athlete-head" cx="35%" cy="28%" r="75%">
-                <stop offset="0%" stopColor="#4d8bc1" />
-                <stop offset="100%" stopColor="#142b4a" />
-              </radialGradient>
-              <linearGradient id="athlete-core" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#245b85" />
-                <stop offset="100%" stopColor="#0b203d" />
-              </linearGradient>
-              <filter id="pose-glow" x="-60%" y="-60%" width="220%" height="220%">
-                <feGaussianBlur stdDeviation="5" result="blur" />
-                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-              </filter>
-            </defs>
-
-            <ellipse className="pose-floor-shadow" cx="170" cy="286" rx="92" ry="13" />
-            <ellipse className="pose-floor-ring" cx="170" cy="280" rx="118" ry="26" />
-            <circle className="pose-body-fill" cx={p[0][0]} cy={p[0][1]} r="25" />
-            <path className="pose-body-torso" d={torsoPath} />
-            <path className="pose-body-limbs" d={limbPath} />
-
-            <path className="pose-skeleton-line" d={skeletonPath} />
-
-            <path
-              className="pose-angle-arc"
-              d={`M${p[12][0] - 15} ${p[12][1] - 17} A 28 28 0 0 1 ${p[12][0] + 8} ${p[12][1] + 20}`}
-            />
-            <text x={p[12][0] - 7} y={p[12][1] + 3} className="pose-angle-label">{phase.angle}°</text>
-
-            {p.map(([x, y], index) => (
-              <circle className="pose-node-circle" cx={x} cy={y} r={index === 0 ? 4 : 5.5} key={index} />
-            ))}
-          </svg>
-
-          <div className="viewfinder-hud-metric">
-            <span>Live angle</span>
-            <strong>{phase.angle}°</strong>
-            <small>Knee flexion</small>
-          </div>
-
-          <div className="viewfinder-form-score">
-            <span>Form score</span>
-            <strong>{phase.key === 'depth' ? 94 : phase.key === 'complete' ? 97 : 89}<small>/100</small></strong>
-          </div>
-
-          <div className="motion-phase-track" aria-hidden="true">
-            {SQUAT_PHASES.map((item, index) => (
-              <i className={index <= phaseIndex ? 'active' : ''} key={item.key} />
-            ))}
-          </div>
-        </div>
-
-        <div className="coach-command-bar">
-          <div className="coach-live-cue">
-            <CheckCircle2 size={18} />
-            <span><small>Coach cue</small><strong>{phase.cue}</strong></span>
-          </div>
-          <div className="coach-rep-count">
-            <span>REP</span>
-            <strong>{String(phase.rep).padStart(2, '0')}</strong>
-            <small>/ 15</small>
-          </div>
-          <button type="button" className="visual-launch-coach" onClick={onTryCoach}>
-            <Camera size={16} /> Try it live <ArrowRight size={15} />
-          </button>
-        </div>
-
-        <div className="visual-signal-strip" aria-hidden="true">
-          <span><Camera size={12} /> Camera</span><i />
-          <span><ScanLine size={12} /> 33 points</span><i />
-          <span><Activity size={12} /> Live cue</span>
-        </div>
-      </article>
-    </div>
-  );
-}
+const scrollBehavior = () =>
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
 
 export default function WelcomeScreen({
   auth,
@@ -199,45 +38,113 @@ export default function WelcomeScreen({
   onNavigate,
 }) {
   const authRef = useRef(null);
+  const navRef = useRef(null);
+  const menuButton = useRef(null);
+  const authTrigger = useRef(null);
   const [showAuthChooser, setShowAuthChooser] = useState(false);
-  const authenticationBusy = ['checking', 'signing-in', 'signing-out'].includes(auth.status);
-  const hasActiveAccount = ['signed-in', 'guest', 'demo'].includes(auth.status);
-  const isAuthChooserVisible = showAuthChooser || Boolean(auth.error);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const authenticationBusy = ["checking", "signing-in", "signing-out"].includes(
+    auth.status,
+  );
+  const hasActiveAccount = ["signed-in", "guest", "demo"].includes(auth.status);
+  const isAuthChooserVisible =
+    !hasActiveAccount && (showAuthChooser || Boolean(auth.error));
 
-  function openAuthChooser() {
-    setShowAuthChooser(true);
-    setTimeout(() => {
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const dismiss = (event) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        menuButton.current?.focus();
+      }
+    };
+    const outside = (event) => {
+      if (
+        !navRef.current?.querySelector("nav")?.contains(event.target) &&
+        !menuButton.current?.contains(event.target)
+      )
+        setMenuOpen(false);
+    };
+    document.addEventListener("keydown", dismiss);
+    document.addEventListener("pointerdown", outside);
+    return () => {
+      document.removeEventListener("keydown", dismiss);
+      document.removeEventListener("pointerdown", outside);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!isAuthChooserVisible) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      authRef.current?.focus({ preventScroll: true });
       authRef.current?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        block: 'nearest',
+        behavior: scrollBehavior(),
+        block: "nearest",
       });
-    }, 50);
-  }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isAuthChooserVisible]);
 
-  function handleCameraClick() {
-    // Preview is independent of Guest mode and never saves a workout.
-    onCameraGuided?.();
+  function openAuthChooser(event) {
+    authTrigger.current = event.currentTarget;
+    setMenuOpen(false);
+    setShowAuthChooser(true);
+    if (isAuthChooserVisible) {
+      authRef.current?.focus({ preventScroll: true });
+      authRef.current?.scrollIntoView({
+        behavior: scrollBehavior(),
+        block: "nearest",
+      });
+    }
+  }
+  function go(action) {
+    setMenuOpen(false);
+    action?.();
   }
 
   return (
-    <main className="welcome-screen-v2">
-      <section className="welcome-hero-v2">
-        <header className="marketing-nav">
+    <main className="welcome-screen-v2 home-page">
+      <header className="marketing-nav home-header" ref={navRef}>
+        <button
+          className="home-brand"
+          type="button"
+          aria-label="BITS in Motion home"
+          onClick={() =>
+            window.scrollTo({ top: 0, behavior: scrollBehavior() })
+          }
+        >
+          <img src="/logo.png" alt="" width="42" height="42" />
+          <span>
+            BITS <small>in Motion</small>
+          </span>
+        </button>
+        <nav
+          id="home-navigation"
+          className={`home-navigation${menuOpen ? " is-open" : ""}`}
+          aria-label="Homepage"
+        >
           <button
-            className="marketing-brand"
             type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })}
+            onClick={() => go(() => onNavigate("features"))}
           >
-            <img src="/logo.png" alt="" />
-            <span><small>Smart India Hackathon 2026</small>BITS in Motion</span>
+            Features
           </button>
-          <nav aria-label="Homepage">
-            <button type="button" onClick={() => onNavigate('features')}>Features</button>
-            <button type="button" onClick={() => onNavigate('how-it-works')}>How it works</button>
-            <button type="button" onClick={onLeaderboard}>Leaderboard</button>
-            <button type="button" onClick={() => onNavigate('terms')}>Terms & Conditions</button>
-            {hasActiveAccount && <button type="button" onClick={onProgress}>Progress</button>}
-          </nav>
+          <button
+            type="button"
+            onClick={() => go(() => onNavigate("how-it-works"))}
+          >
+            How it works
+          </button>
+          <button type="button" onClick={() => go(onLeaderboard)}>
+            Leaderboard
+          </button>
+          {hasActiveAccount && (
+            <button type="button" onClick={() => go(onProgress)}>
+              Progress
+            </button>
+          )}
+        </nav>
+        <div className="home-header-actions">
           {hasActiveAccount ? (
             <UserMenu
               user={auth.user}
@@ -246,260 +153,361 @@ export default function WelcomeScreen({
               onNavigate={onNavigate}
               onSignOut={onSignOut}
               onExitGuest={onExitGuest}
-              dark
             />
           ) : (
-            <div className="marketing-nav-actions">
-              <button
-                type="button"
-                className="nav-signin-button"
-                onClick={openAuthChooser}
-              >
-                Sign in
+            <button
+              className="nav-signin-button home-signin"
+              type="button"
+              aria-expanded={isAuthChooserVisible}
+              aria-controls="home-auth-chooser"
+              onClick={openAuthChooser}
+            >
+              Sign in <ArrowRight size={16} />
+            </button>
+          )}
+          <button
+            ref={menuButton}
+            className="home-menu-toggle home-icon-button"
+            type="button"
+            aria-label={menuOpen ? "Close navigation" : "Open navigation"}
+            aria-expanded={menuOpen}
+            aria-controls="home-navigation"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            {menuOpen ? <X size={21} /> : <Menu size={21} />}
+          </button>
+        </div>
+      </header>
+
+      <section className="home-hero" aria-labelledby="home-title">
+        <div className="marketing-copy home-copy">
+          <span className="home-kicker">
+            <i className="home-kicker-dot" /> Built around student life
+          </span>
+          <h1 id="home-title">
+            Fitness that fits
+            <br />
+            <span>student life.</span>
+          </h1>
+          <p>
+            Practical workouts for your time, space, equipment and goals. Add
+            Camera Coach for rep counting and movement cues—right in your room.
+          </p>
+          <div className="home-actions">
+            <button
+              className="home-button home-button-primary"
+              type="button"
+              onClick={hasActiveAccount ? onContinue : openAuthChooser}
+            >
+              {hasActiveAccount
+                ? "Continue my journey"
+                : "Set up my fitness journey"}{" "}
+              <ArrowRight size={18} />
+            </button>
+            <button
+              className="home-button home-button-secondary"
+              type="button"
+              onClick={onCameraGuided}
+            >
+              <Camera size={18} /> Live Camera Coach
+            </button>
+          </div>
+          <div className="home-discovery">
+            <button type="button" onClick={() => onNavigate("features")}>
+              Explore features <ChevronRight size={15} />
+            </button>
+            <button type="button" onClick={() => onNavigate("how-it-works")}>
+              How it works <ChevronRight size={15} />
+            </button>
+          </div>
+          {hasActiveAccount && (
+            <div className="home-continuation">
+              <span className="home-continuation-avatar">
+                <UserRound size={20} />
+              </span>
+              <div>
+                <strong>Welcome back, {displayName || "Guest"}.</strong>
+                <span>
+                  {hasProfile
+                    ? "Your plan is ready when you are."
+                    : "Your next step: finish your setup."}
+                </span>
+              </div>
+              <button type="button" onClick={onContinue}>
+                {hasProfile ? "Open dashboard" : "Continue setup"}{" "}
+                <ArrowRight size={16} />
               </button>
             </div>
           )}
-        </header>
-
-        <div className="marketing-hero-grid">
-          <div className="marketing-copy">
-            <span className="status-pill dark">
-              <Sparkles size={15} /> AI fitness, built for student life
-            </span>
-            <h1><span>Move smarter.</span><span className="hero-title-accent">Train anywhere.</span></h1>
-            <p>
-              Personal plans for hostel rooms, PGs and home—with an on-device coach that sees your movement, counts reps and gives clear form cues in real time.
-            </p>
-
-            <div className="hero-proof-row" aria-label="Product highlights">
-              <span><CheckCircle2 size={15} /> 10–60 min plans</span>
-              <span><CheckCircle2 size={15} /> Zero gym required</span>
-              <span><ShieldCheck size={15} /> Camera stays local</span>
-            </div>
-
-            <div className="marketing-actions">
-              <button
-                className="button button-primary button-large"
-                type="button"
-                onClick={hasActiveAccount ? onContinue : openAuthChooser}
-              >
-                {hasActiveAccount ? 'Continue my journey' : 'Set up my fitness journey'} <ArrowRight size={19} />
-              </button>
-              <button
-                className="button button-accent button-large camera-hero-btn"
-                type="button"
-                onClick={handleCameraClick}
-              >
-                <Camera size={19} /> Live Camera Coach
-              </button>
-            </div>
-
-            <div className="marketing-text-links">
-              <button
-                className="marketing-text-link"
-                type="button"
-                onClick={() => onNavigate('features')}
-              >
-                <Sparkles size={16} /> Explore features <ChevronRight size={15} />
-              </button>
-              <button
-                className="marketing-text-link"
-                type="button"
-                onClick={() => onNavigate('how-it-works')}
-              >
-                How it works <ChevronRight size={16} />
-              </button>
-            </div>
-
-            {hasActiveAccount && (
-              <div className="auth-choice-card" ref={authRef}>
-                <div className="returning-state">
-                  <div className="returning-avatar"><UserRound size={22} /></div>
-                  <div>
-                    <span>{auth.status === 'signed-in' ? 'Synced account' : auth.status === 'demo' ? 'Judge demo' : 'Guest account'}</span>
-                    <strong>Ready when you are, {displayName || 'Guest'}.</strong>
-                  </div>
-                  <button className="button button-white" type="button" onClick={onContinue}>
-                    {hasProfile ? 'Open dashboard' : 'Continue setup'} <ArrowRight size={17} />
+          {isAuthChooserVisible && (
+            <section
+              id="home-auth-chooser"
+              className="auth-choice-card auth-choice-expanded home-auth"
+              ref={authRef}
+              tabIndex={-1}
+              aria-labelledby="home-auth-title"
+            >
+              <div className="home-auth-heading">
+                <div>
+                  <h2 id="home-auth-title">Choose how to continue</h2>
+                  <p>Your routine, your choice.</p>
+                </div>
+                {!auth.error && (
+                  <button
+                    className="home-icon-button"
+                    type="button"
+                    aria-label="Close sign-in options"
+                    onClick={() => {
+                      setShowAuthChooser(false);
+                      authTrigger.current?.focus();
+                    }}
+                  >
+                    <X size={18} />
+                  </button>
+                )}
+              </div>
+              <div className="home-auth-options">
+                <div>
+                  <h3>Google Account</h3>
+                  <p>Keep your plan and progress across devices.</p>
+                  <GoogleSignInButton
+                    onCredential={onGoogleCredential}
+                    disabled={!auth.accountSyncAvailable || authenticationBusy}
+                  />
+                  {!auth.accountSyncAvailable && auth.status !== "checking" && (
+                    <small>Cloud sign-in is currently unavailable.</small>
+                  )}
+                </div>
+                <div>
+                  <h3>Guest Mode</h3>
+                  <p>Start without an account. Saved on this browser.</p>
+                  <button
+                    className="home-button home-button-secondary"
+                    type="button"
+                    onClick={onContinueGuest}
+                    disabled={["signing-in", "signing-out"].includes(
+                      auth.status,
+                    )}
+                  >
+                    <UserRound size={17} /> Continue as Guest
                   </button>
                 </div>
               </div>
-            )}
-
-            {!hasActiveAccount && isAuthChooserVisible && (
-              <div className="auth-choice-card auth-choice-expanded" ref={authRef}>
-                <div className="auth-choice-header">
-                  <strong>Choose how to continue</strong>
-                  <span>Start your personalized routine or test locally without signing in.</span>
-                </div>
-                <div className="auth-choice-options-grid">
-                  <div className="auth-option-card">
-                    <div className="auth-option-badge">Cloud Sync</div>
-                    <h4>Google Account</h4>
-                    <p>Save your profile, plans and progress to your account.</p>
-                    <div className="auth-option-action">
-                      <GoogleSignInButton
-                        onCredential={onGoogleCredential}
-                        disabled={!auth.accountSyncAvailable || authenticationBusy}
-                      />
-                    </div>
-                    {!auth.accountSyncAvailable && auth.status !== 'checking' && (
-                      <small className="setup-note">Cloud sign-in is currently unavailable.</small>
-                    )}
-                  </div>
-
-                  <div className="auth-option-card">
-                    <div className="auth-option-badge guest">Private & Local</div>
-                    <h4>Guest Mode</h4>
-                    <p>Continue locally without signing in.</p>
-                    <div className="auth-option-action">
-                      <button
-                        className="guest-continue-button"
-                        type="button"
-                        onClick={onContinueGuest}
-                        disabled={['signing-in', 'signing-out'].includes(auth.status)}
-                      >
-                        <UserRound size={17} /> Continue as Guest
-                      </button>
-                    </div>
-                    <small className="setup-note">Stored in local browser storage only.</small>
-                  </div>
-                </div>
-                {auth.status === 'checking' && <small className="setup-note checking">Checking for a returning account…</small>}
-                {auth.error && <small className="auth-error">{auth.error}</small>}
-              </div>
-            )}
-          </div>
-
-          <CameraCoachPreview onTryCoach={handleCameraClick} />
-        </div>
-
-        <div className="marketing-privacy">
-          <ShieldCheck size={18} />
-          <span><strong>Your movement stays yours.</strong> Camera frames are processed locally in your browser and are never recorded or uploaded.</span>
-        </div>
-      </section>
-
-      {/* Highlights Section */}
-      <section className="student-benefits">
-        <div className="section-intro">
-          <span />
-          <div>
-            <small>Simple to start. Real progress.</small>
-            <h2>Why it works for students</h2>
-            <p>Your profile shapes the plan; the camera guides supported movements; your saved sessions make progress visible.</p>
-          </div>
-          <span />
-        </div>
-        <div className="benefit-grid">
-          <article>
-            <div className="benefit-icon blue"><Dumbbell size={25} /></div>
-            <h3>Built for real student spaces</h3>
-            <p>Short sessions, minimal equipment, and practical movements designed for hostel rooms, PGs, and apartments.</p>
-            <div className="benefit-graphic room-graphic" aria-hidden="true">
-              <span className="room-mat" />
-              <span className="room-bag" />
-              <span className="room-zone">2m × 2m</span>
-            </div>
-          </article>
-          <article>
-            <div className="benefit-icon teal"><Sparkles size={25} /></div>
-            <h3>Explainable recommendations</h3>
-            <p>Transparent rules use your goal, available time, experience, location, and equipment—never a mysterious black box.</p>
-            <div className="benefit-graphic recommendation-graphic" aria-hidden="true">
-              <span>Goal</span><i /><span>Time</span><i /><span>Space</span>
-              <strong>YOUR PLAN</strong>
-            </div>
-          </article>
-          <article>
-            <div className="benefit-icon violet"><ScanLine size={25} /></div>
-            <h3>Four live movement coaches</h3>
-            <p>MediaPipe landmarks support squats, push-ups, crunches, and jumping jacks with automated rep counting and form cues.</p>
-            <div className="benefit-graphic coach-graphic" aria-hidden="true">
-              <span><i /> SQUAT <strong>LIVE</strong></span>
-              <span><i /> PUSH-UP <strong>LIVE</strong></span>
-              <span><i /> CRUNCH <strong>LIVE</strong></span>
-              <span><i /> JACK <strong>LIVE</strong></span>
-            </div>
-          </article>
-        </div>
-        <div className="section-footer-action">
-          <button
-            className="button button-secondary"
-            type="button"
-            onClick={() => onNavigate('features')}
-          >
-            Explore all capabilities in detail <ArrowRight size={17} />
-          </button>
-        </div>
-      </section>
-
-      {/* How it Works Overview */}
-      <section className="how-it-works">
-        <div>
-          <span className="eyebrow">From profile to progress</span>
-          <h2>A fitness loop that keeps you in control</h2>
-        </div>
-        <ol>
-          <li><i>01</i><strong>Tell us what fits</strong><span>Add your goal, space, time, and equipment.</span></li>
-          <li><i>02</i><strong>Get a realistic plan</strong><span>Review it, start now, or explore the app first.</span></li>
-          <li><i>03</i><strong>Move with guidance</strong><span>Use live camera coaching only when you choose.</span></li>
-          <li><i>04</i><strong>See your momentum</strong><span>Real saved sessions power your progress.</span></li>
-        </ol>
-        <div className="how-it-works-actions">
-          <button
-            className="button button-on-dark"
-            type="button"
-            onClick={() => onNavigate('how-it-works')}
-          >
-            See full 7-step journey <ArrowRight size={16} />
-          </button>
-          {!hasActiveAccount && (
-            <button className="judge-demo-link" type="button" onClick={onJudgeDemo} disabled={authenticationBusy}>
-              <Zap size={16} /> Preview the isolated judge demo
-            </button>
+              {auth.status === "checking" && (
+                <p role="status">Checking for a returning account…</p>
+              )}
+              {auth.error && (
+                <p className="auth-error" role="alert">
+                  {auth.error}
+                </p>
+              )}
+            </section>
           )}
         </div>
-      </section>
-
-      {/* Dedicated Homepage Footer */}
-      <footer className="welcome-footer">
-        <div className="welcome-footer-inner">
-          <div className="footer-brand">
-            <div className="footer-brand-logo">
-              <img src="/logo.png" alt="" />
-              <div>
-                <strong>BITS in Motion</strong>
-                <span>Smart India Hackathon 2026 Prototype</span>
-              </div>
-            </div>
-            <p className="footer-tagline">
-              Student-focused AI fitness platform with on-device camera guidance, dorm-friendly workouts, and verifiable privacy.
+        <HomeCoachPreview onTryCoach={onCameraGuided} />
+        <aside className="home-privacy">
+          <span className="home-privacy-icon">
+            <ShieldCheck size={25} />
+          </span>
+          <div>
+            <h2>Your movement stays yours.</h2>
+            <p>
+              Camera frames are processed locally in your browser. Never
+              recorded. Never uploaded.
             </p>
           </div>
+          <button type="button" onClick={() => onNavigate("privacy")}>
+            Our privacy promise <ArrowRight size={16} />
+          </button>
+        </aside>
+      </section>
 
-          <div className="footer-nav-col">
-            <strong>Platform</strong>
-            <button type="button" onClick={() => onNavigate('features')}>Features</button>
-            <button type="button" onClick={() => onNavigate('how-it-works')}>How it works</button>
-            <button type="button" onClick={handleCameraClick}>Live Camera Coach</button>
-            <button type="button" onClick={onLeaderboard}>Campus Leaderboard</button>
+      <section className="home-fit" aria-labelledby="home-fit-title">
+        <div className="home-section-heading">
+          <div>
+            <span className="home-kicker">Less friction. More movement.</span>
+            <h2 id="home-fit-title">
+              Made for the life
+              <br />
+              you actually live.
+            </h2>
           </div>
-
-          <div className="footer-nav-col">
-            <strong>Trust & Safety</strong>
-            <button type="button" onClick={() => onNavigate('terms')}>Terms & Conditions</button>
-            <button type="button" onClick={() => onNavigate('privacy')}>Privacy Policy</button>
-            <button type="button" onClick={() => onNavigate('health-disclaimer')}>Health Disclaimer</button>
-          </div>
+          <p>
+            Between lectures, deadlines and everything else, a little movement
+            should fit in—not get in the way.
+          </p>
         </div>
+        <div className="home-fit-grid">
+          <article className="home-fit-time">
+            <Clock3 size={23} />
+            <div className="home-time-graphic" aria-hidden="true">
+              <strong>
+                20 <small>min</small>
+              </strong>
+              <div>
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <i key={i} />
+                ))}
+              </div>
+              <span>A break worth taking</span>
+            </div>
+            <h3>A little time goes a long way.</h3>
+            <p>
+              Choose a 10–60 minute plan with warm-up, workout and cool-down
+              built in.
+            </p>
+          </article>
+          <article className="home-fit-space">
+            <Dumbbell size={23} />
+            <div className="home-space-graphic" aria-hidden="true">
+              <svg viewBox="0 0 300 150">
+                <path d="M42 92L158 30L270 84L155 144Z" fill="#d6ddd2" />
+                <path d="M42 92V40L158 0V30Z" fill="#e9eee5" />
+                <path d="M158 0L270 47V84L158 30Z" fill="#dfe7d9" />
+                <path d="M90 92L170 48L228 76L148 122Z" fill="#669386" />
+                <path
+                  d="M105 92L170 57L213 77"
+                  fill="none"
+                  stroke="#bad0c2"
+                  strokeWidth="2"
+                />
+                <path
+                  d="M222 55Q213 40 229 36Q247 33 251 50L257 69L228 79Z"
+                  fill="#bda07c"
+                />
+                <path
+                  d="M227 42Q229 24 241 38M232 56L249 51"
+                  fill="none"
+                  stroke="#806b51"
+                  strokeWidth="3"
+                />
+              </svg>
+            </div>
+            <h3>Your room is enough.</h3>
+            <p>
+              PG room, hostel or home. A plan that respects your space and the
+              equipment you have.
+            </p>
+          </article>
+          <article className="home-fit-coach">
+            <ScanLine size={23} />
+            <div className="home-cue-graphic" aria-hidden="true">
+              <span>
+                <i>✓</i> Rep complete
+              </span>
+              <strong>
+                One rep.
+                <br />
+                More confidence.
+              </strong>
+            </div>
+            <h3>Guidance when you want it.</h3>
+            <p>
+              Try four camera-supported movements, or move at your own pace with
+              Self-Guided workouts.
+            </p>
+          </article>
+        </div>
+      </section>
 
-        <div className="footer-bottom-bar">
-          <div className="footer-privacy-badge">
-            <ShieldCheck size={16} />
-            <span>100% on-device vision processing • Zero video upload guarantee</span>
+      <section className="home-journey" aria-labelledby="home-journey-title">
+        <div>
+          <span className="home-kicker">Start where you are</span>
+          <h2 id="home-journey-title">
+            Your next good habit
+            <br />
+            starts with a plan.
+          </h2>
+          <button
+            className="home-button home-button-secondary"
+            type="button"
+            onClick={() => onNavigate("how-it-works")}
+          >
+            See how it works <ArrowRight size={17} />
+          </button>
+        </div>
+        <ol>
+          <li>
+            <span>01</span>
+            <div>
+              <h3>Make it yours</h3>
+              <p>Your goal, your time, your space and equipment.</p>
+            </div>
+          </li>
+          <li>
+            <span>02</span>
+            <div>
+              <h3>Find your rhythm</h3>
+              <p>Follow your plan with camera or self-guided movements.</p>
+            </div>
+          </li>
+          <li>
+            <span>03</span>
+            <div>
+              <h3>See yourself move forward</h3>
+              <p>Your saved sessions make your progress visible.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <footer className="welcome-footer home-footer">
+        <div className="home-footer-top">
+          <div className="home-footer-brand">
+            <strong>
+              BITS <span>in Motion</span>
+            </strong>
+            <p>
+              Small spaces. Real movement.
+              <br />
+              Built for student life.
+            </p>
           </div>
-          <small>© 2026 BITS in Motion • SIH 2026</small>
+          <nav aria-label="Explore">
+            <h2>Explore</h2>
+            <button type="button" onClick={() => onNavigate("features")}>
+              Features
+            </button>
+            <button type="button" onClick={() => onNavigate("how-it-works")}>
+              How it works
+            </button>
+            <button type="button" onClick={onCameraGuided}>
+              Live Camera Coach
+            </button>
+            <button type="button" onClick={onLeaderboard}>
+              Campus Leaderboard
+            </button>
+          </nav>
+          <nav aria-label="Trust and safety">
+            <h2>Your peace of mind</h2>
+            <button type="button" onClick={() => onNavigate("privacy")}>
+              Privacy Policy
+            </button>
+            <button type="button" onClick={() => onNavigate("terms")}>
+              Terms & Conditions
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate("health-disclaimer")}
+            >
+              Health Disclaimer
+            </button>
+            {!hasActiveAccount && (
+              <button
+                type="button"
+                onClick={onJudgeDemo}
+                disabled={authenticationBusy}
+              >
+                <Zap size={15} /> Preview the isolated judge demo
+              </button>
+            )}
+          </nav>
+        </div>
+        <div className="home-footer-bottom">
+          <small>© 2026 BITS in Motion · A student-built SIH project</small>
+          <span>
+            <ShieldCheck size={16} /> Your camera. Your device. Your choice.
+          </span>
         </div>
       </footer>
     </main>
