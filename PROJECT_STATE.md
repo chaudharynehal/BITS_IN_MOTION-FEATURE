@@ -1,6 +1,10 @@
 # BITS in Motion — Current Project State
 
-## Homepage visual refinement — release in progress
+## Latest live release — homepage visual refinement
+
+- **Application / production checkpoint:** `1319ce5` (`feat: refresh homepage graphics and fix hero focus artifact`), pushed normally to `feature/google-auth-user-database` on 23 September 2026.
+- **Deployment:** Vercel reported `success` / `Deployment has completed`. The production URL serves `index-CiyToICp.js` and `index-CX05yGvF.css`, matching the verified local build.
+- **Production smoke:** actual deployed homepage passed at 390×844, 768, 820, 1024, 1440, and 844×390; no horizontal overflow or heading focus-ring artifact. Setup chooser, `Try it live` Camera Coach route, browser Back, Features, How It Works, Privacy, Terms, and Health pages passed. No JavaScript exceptions or failed network requests were observed. The live status API returned Google and database configured. No real sign-in, camera permission grant, workout save, or production data write was performed.
 
 - The homepage hero has been rebuilt around a clearer `Move smarter. Train anywhere.` message, two prioritized conversion actions, compact proof points, and lower-emphasis Features/How It Works links. The previous four-button stack and awkward headline wrapping were removed.
 - The Camera Coach illustration is now a larger motion-analysis stage with a dimensional athlete, tracked joints, perspective floor, scan line, knee angle, live form score, phase progress, rep count, coaching cue, and an interactive `Try it live` action. The same standing/descending/depth/ascending/complete sequence and reduced-motion behavior remain intact.
@@ -9,9 +13,9 @@
 - Responsive behavior was rebalanced at 390, 768, 820, 1024, and 1440 pixels. A dedicated 844×390 landscape composition keeps the headline, both main actions, and the coach visualization visible together instead of pushing every action below the first viewport. The homepage is now included in automated landscape screenshot/overflow coverage.
 - Files changed: `src/screens/WelcomeScreen.jsx`, `src/styles/global.css`, and `scripts/verify-browser.mjs`.
 - Verification: `npm test` passed 15 suites / 830 tests; `npm run build` passed; `node scripts/verify-browser.mjs` passed all 22 high-level flows with no JavaScript errors, unexpected network failures, or horizontal overflow; `git diff --check` passed.
-- The user authorized immediate deployment on 23 September 2026. Release uses the existing unprotected `feature/google-auth-user-database` production branch and its Vercel integration. Deployment verification is pending; no database changes are required.
+- The user authorized immediate deployment on 23 September 2026. Release used the existing unprotected `feature/google-auth-user-database` production branch and its Vercel integration. No database changes were required.
 
-## Live release
+## Previous live release — camera and student setup
 
 - **Authoritative branch:** `feature/google-auth-user-database`.
 - **Release branch:** `feature/camera-coach-product-revamp`, merged locally with a merge commit and pushed to the unprotected authoritative branch.
@@ -62,4 +66,4 @@
 
 ## Safe continuation point
 
-Complete the authorized homepage deployment and verify the production homepage and API. Physical-device QA for crunches, push-ups, squats, and jumping jacks remains the next camera-quality activity. Catalogue expansion for dumbbells or resistance bands should add verified exercise data before recommendations attempt to use that equipment.
+The homepage release is live and verified. Physical-device QA for crunches, push-ups, squats, and jumping jacks remains the next camera-quality activity. Catalogue expansion for dumbbells or resistance bands should add verified exercise data before recommendations attempt to use that equipment.
