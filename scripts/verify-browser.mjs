@@ -1087,6 +1087,7 @@ try {
   });
 
   assert.deepEqual(errors, [], 'Unexpected browser JavaScript errors');
+  assert.deepEqual(networkFailures.filter((failure) => !failure.cancelled), [], 'Unexpected failed network requests');
   const report = { passed: results, screenshots: outputDirectory,
     scope: 'Mock Google callback and API; synthetic camera frames with real MediaPipe model. Real OAuth, Neon and physical exercise accuracy were not tested.',
     requests: requests.length, javascriptErrors: errors, modelDiagnostics, networkFailures, httpErrors,

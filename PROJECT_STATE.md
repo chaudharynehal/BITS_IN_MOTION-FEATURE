@@ -1,6 +1,22 @@
 # BITS in Motion — Current Project State
 
-## Latest live release — homepage visual refinement
+## Homepage product experience — release candidate (23 September 2026)
+
+- **Release branch:** `feature/student-homepage-experience`, based on authoritative `feature/google-auth-user-database` at `c3b53e9`. Origin was fetched and remained at that checkpoint before release.
+- **Scope:** the entire existing homepage, not a new route or replacement application. The blue/teal identity remains, now with quiet off-white/mint surfaces, stronger student-focused typography, clear primary/secondary CTAs, integrated privacy messaging, illustrated benefit cards, a concise journey section, and a cohesive footer.
+- **FIX:** removed 409 obsolete/conflicting homepage-only CSS rules; retained the noninteractive heading-focus artifact regression fix; replaced hidden mobile navigation with a keyboard-accessible menu; fixed cramped mobile privacy copy; protected long account names; made the sign-in chooser move/restore keyboard focus; removed the demo rep counter's backwards reset and the fabricated form score. Interactive focus rings remain visible.
+- **IMPROVE:** the coach illustration is a lightweight side-view human rig with planted feet, consistent limb proportions, shared body/joint coordinates, calculated knee angle, five squat phases, a monotonically increasing demo count and one coaching cue. It is explicitly labelled an illustration, never opens the camera, pauses outside the viewport/hidden tab, supports manual pause, and stays static for reduced-motion users.
+- **POLISH:** consistent button heights, restrained pointer interactions, touch-sized controls, compact returning-user continuation, purposeful borders, and responsive tablet/landscape compositions. No graphics framework, analytics or new runtime dependency was added.
+- **KEEP:** existing Google/Guest/Judge Demo behavior; setup, dashboard, plan and progress state; actual camera detection/voice logic; all recommendation/equipment/location behavior; browser Back and trust routes. Camera privacy promises remain unchanged.
+- **Font reliability:** the first full browser run exposed two third-party font request failures. The existing Manrope and Space Grotesk fonts are now self-hosted as unmodified WOFF2 subsets with their SIL OFL licenses. The final run made no third-party font requests and had no network failures. No new typeface was introduced.
+- **Files:** `src/screens/WelcomeScreen.jsx`, extracted `src/components/HomeCoachPreview.jsx`, consolidated `src/styles/homepage.css`, removal of stale rules from `src/styles/global.css`, first-party `src/styles/fonts.css` and `public/fonts/`, new `scripts/verify-homepage.mjs`, and a network-failure assertion in `scripts/verify-browser.mjs`.
+- **Verification:** `npm test`: 15 suites / 830 passed / 0 skipped / 0 failed. `npm run build`: PASS (`index-D8goIygc.js`, `index-zxEyYwio.css`). Full browser QA: 22/22 flows, no JavaScript errors, no failed network requests, no overflow. Homepage QA: 38 checks against both Vite and the compiled production preview, 24 viewport/full-page screenshot pairs, no console/runtime errors, failed requests or clipped/overflowing controls. `git diff --check`: PASS.
+- **Visual review:** full-page and viewport output inspected before deployment at 390×844, 430×932, 844×390, 768×1024, 820×1180, 1024×768 and 1440×900. Anonymous, expanded setup and returning Guest states covered at all seven sizes; long names additionally covered at 390, 768 and 1024. Motion/paused and reduced-motion states were checked.
+- **Local evidence:** final full-suite report at `/var/folders/d2/xq_721js4xq6jrfbfqmxp8gh0000gp/T/bits-motion-browser-shFPA3/report.json`; compiled-preview homepage report/screenshots at `/var/folders/d2/xq_721js4xq6jrfbfqmxp8gh0000gp/T/bits-homepage-5T6RDh/`.
+- **Database:** no schema or data change required. The prior three-row production goal-tag patch remains recorded below; it was not rerun for this homepage release.
+- **Release state:** verified locally; commit/push/merge and production smoke are the next step. No live-release claim is made for this candidate yet.
+
+## Previous live release — homepage visual refinement
 
 - **Application / production checkpoint:** `1319ce5` (`feat: refresh homepage graphics and fix hero focus artifact`), pushed normally to `feature/google-auth-user-database` on 23 September 2026.
 - **Deployment:** Vercel reported `success` / `Deployment has completed`. The production URL serves `index-CiyToICp.js` and `index-CX05yGvF.css`, matching the verified local build.
@@ -66,4 +82,4 @@
 
 ## Safe continuation point
 
-The homepage release is live and verified. Physical-device QA for crunches, push-ups, squats, and jumping jacks remains the next camera-quality activity. Catalogue expansion for dumbbells or resistance bands should add verified exercise data before recommendations attempt to use that equipment.
+The new cohesive homepage is verified locally and ready for the existing production release workflow. Complete commit/push/merge, observe Vercel success and smoke-test the production assets. Physical-device QA for crunches, push-ups, squats, and jumping jacks remains a separate manual activity. Catalogue expansion for dumbbells or resistance bands should add verified exercise data before recommendations attempt to use that equipment.
