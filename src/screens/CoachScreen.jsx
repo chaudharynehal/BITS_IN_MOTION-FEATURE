@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Camera, Check, CheckCircle2, CircleStop, Info, LoaderCircle, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, TriangleAlert, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { getCameraErrorState, isCameraSupported, startCamera, stopCamera } from '../vision/camera';
-import { clearPoseOverlay, drawPoseOverlay, initializePoseLandmarker } from '../vision/poseLandmarker';
+import { clearPoseOverlay, drawPoseOverlay } from '../vision/poseLandmarker';
+import { createPoseProvider } from '../vision/poseProvider';
 import { createExerciseDetector, DETECTOR_CONFIGS } from '../vision/exerciseDetectors';
 import { createSubjectTracker } from '../vision/subjectContinuity';
 import { createVideoBrightnessSampler } from '../vision/frameReadiness';
@@ -49,7 +50,17 @@ export default function CoachScreen({
   const cameraRequestRef = useRef(null);
   const modelRequestRef = useRef(0);
   const summaryRef = useRef(null);
+  const processingRef = useRef(false);
   const lastUiStateRef = useRef({ at: 0, reps: 0, stage: 'Finding start', measurementValue: null, measurementUnit: '°' });
+  const captureDataRef = useRef([]);
+
+  // Developer mode backend selection
+  const debugParams = new URLSearchParams(window.location.search);
+  const isDebugMode = debugParams.get('cameraDebug') === '1';
+  const [poseBackend, setPoseBackend] = useState(isDebugMode ? (debugParams.get('backend') || 'mediapipe') : 'mediapipe');
+  const lastLatenciesRef = useRef([]);
+  const [diagnosticData, setDiagnosticData] = useState({ fps: 0, latency: 0 });
+  const [isCapturing, setIsCapturing] = useState(false);
 
   const [modelStatus, setModelStatus] = useState('loading');
   const [modelNote, setModelNote] = useState('Loading the lightweight pose model…');
@@ -78,17 +89,34 @@ export default function CoachScreen({
   const publishFeedback = useCallback((cue) => {
     const now = performance.now();
     const current = feedbackRef.current;
+    
+    if (cue.message === current.message) {
+      if (!current.spoken && (now - current.firstSeen) > 400) {
+        current.spoken = true;
+        if (VOICE_CUES[cue.key]) speakCue(VOICE_CUES[cue.key], { force: false, priority: cue.priority });
+      }
+      current.until = now + (cue.holdMs || 700);
+      return;
+    }
+
     if (now < current.until && cue.priority <= current.priority) return;
-    if (cue.message === current.message && now < current.until) return;
-    const next = { ...cue, until: now + (cue.holdMs || 700) };
+
+    const next = { ...cue, firstSeen: now, spoken: false, until: now + (cue.holdMs || 700) };
     feedbackRef.current = next;
+    
     if (cue.key && cue.key !== lastCueKeyRef.current) {
       cueCountsRef.current[cue.key] = (cueCountsRef.current[cue.key] || 0) + 1;
       lastCueKeyRef.current = cue.key;
     }
+    
     if (mountedRef.current) setFeedback(next);
 
-    if (VOICE_CUES[cue.key]) speakCue(VOICE_CUES[cue.key]);
+    // High priority readiness (6) or success (7+) cues speak faster, but let's just make success instant
+    // framing cues (priority 6) are 400ms stable. 
+    if (cue.priority >= 7) {
+      next.spoken = true;
+      if (VOICE_CUES[cue.key]) speakCue(VOICE_CUES[cue.key], { force: true, priority: cue.priority });
+    }
   }, [speakCue]);
 
   useEffect(() => {
@@ -113,23 +141,23 @@ export default function CoachScreen({
     setMeasurementUnit(exerciseId === 'jumping-jacks' ? '×' : '°');
     setFeedback(INITIAL_FEEDBACK);
     setPreviewSummary(null);
-  }, [exerciseId]);
+  }, [exerciseId, poseBackend]);
 
   const loadModel = useCallback(async () => {
     const request = ++modelRequestRef.current;
     landmarkerRef.current?.close();
     landmarkerRef.current = null;
     setModelStatus('loading');
-    setModelNote('Loading the lightweight pose model…');
+    setModelNote(`Loading the ${poseBackend === 'movenet' ? 'MoveNet Thunder' : 'MediaPipe'} pose model…`);
     try {
-      const landmarker = await initializePoseLandmarker(() => {
+      const provider = await createPoseProvider(poseBackend, () => {
         if (mountedRef.current) setModelNote('GPU unavailable—switching to compatible CPU mode…');
       });
       if (!mountedRef.current || modelRequestRef.current !== request) {
-        landmarker.close();
+        provider.close();
         return;
       }
-      landmarkerRef.current = landmarker;
+      landmarkerRef.current = provider;
       setModelStatus('ready');
       setModelNote('Pose model ready');
     } catch (error) {
@@ -139,7 +167,7 @@ export default function CoachScreen({
         setModelNote('The pose model could not load. Check the connection and try again.');
       }
     }
-  }, []);
+  }, [poseBackend]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -158,14 +186,18 @@ export default function CoachScreen({
     };
   }, [loadModel]);
 
-  const processFrame = useCallback(() => {
+  const processFrame = useCallback(async () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const landmarker = landmarkerRef.current;
-    if (!video || !canvas || !landmarker || !streamRef.current) return;
+    const provider = landmarkerRef.current;
+    if (!video || !canvas || !provider || !streamRef.current || processingRef.current) {
+      animationRef.current = requestAnimationFrame(processFrame);
+      return;
+    }
 
     if (video.readyState >= 2 && video.currentTime !== lastVideoTimeRef.current) {
       lastVideoTimeRef.current = video.currentTime;
+      processingRef.current = true;
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -175,7 +207,13 @@ export default function CoachScreen({
       try {
         const now = performance.now();
         const brightness = brightnessSamplerRef.current.sample(video, now);
-        const result = landmarker.detectForVideo(video, now);
+        const result = await provider.detect(video, now);
+        
+        if (!mountedRef.current || streamRef.current !== video.srcObject) {
+          processingRef.current = false;
+          return;
+        }
+
         const trackedPose = subjectTrackerRef.current.update(result.landmarks || [], result.worldLandmarks || []);
         const landmarks = trackedPose?.landmarks;
         drawPoseOverlay(canvas, landmarks);
@@ -185,6 +223,30 @@ export default function CoachScreen({
           frameBrightness: brightness,
         }, now);
         const measurement = state.measurement;
+
+        // Diagnostic Data update
+        if (isDebugMode) {
+          lastLatenciesRef.current.push({ time: now, latency: result.inferenceLatency });
+          if (lastLatenciesRef.current.length > 30) lastLatenciesRef.current.shift();
+          const avgLatency = lastLatenciesRef.current.reduce((a, b) => a + b.latency, 0) / lastLatenciesRef.current.length;
+          const oldest = lastLatenciesRef.current[0].time;
+          const fps = lastLatenciesRef.current.length > 1 ? (lastLatenciesRef.current.length - 1) * 1000 / Math.max(1, now - oldest) : 0;
+          setDiagnosticData({ fps: Math.round(fps), latency: Math.round(avgLatency), poseDetected: !!landmarks, side: measurement.side || 'N/A' });
+          
+          if (isCapturing) {
+            captureDataRef.current.push({
+              timestamp: now,
+              exercise: exerciseId,
+              poseBackend,
+              visibility: measurement.valid ? measurement.visibility : 0,
+              angles: measurement,
+              movementPhase: state.phaseLabel,
+              repCount: state.reps,
+              manualLabel: null,
+              landmarks: landmarks ? landmarks.map(l => l ? { x: l.x, y: l.y, z: l.z, v: l.visibility } : null) : null
+            });
+          }
+        }
 
         if (state.reps > lastSpokenRepRef.current) {
           lastSpokenRepRef.current = state.reps;
@@ -220,15 +282,18 @@ export default function CoachScreen({
           publishFeedback(state.feedback);
         }
       } catch (error) {
+        console.error(error);
         stopSessionCamera();
         setModelStatus('error');
         setModelNote('Pose tracking stopped because the model could not process the camera. Retry the model, then start a new session.');
+        processingRef.current = false;
         return;
       }
+      processingRef.current = false;
     }
 
     animationRef.current = requestAnimationFrame(processFrame);
-  }, [publishFeedback, speakCue]);
+  }, [publishFeedback, speakCue, isDebugMode, isCapturing, exerciseId, poseBackend]);
 
   function releaseTrackEndListeners() {
     trackEndCleanupRef.current?.();
@@ -393,8 +458,86 @@ export default function CoachScreen({
     document.querySelector('.preview-exercise-tab[aria-pressed="true"]')?.focus();
   }
 
+
+  function toggleCapture() {
+    if (isCapturing) {
+      setIsCapturing(false);
+      // Export capture
+      if (captureDataRef.current.length > 0) {
+        const blob = new Blob([captureDataRef.current.map(d => JSON.stringify(d)).join('\n')], { type: 'application/jsonl' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `pose-capture-${exerciseId}-${Date.now()}.jsonl`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      captureDataRef.current = [];
+    } else {
+      captureDataRef.current = [];
+      setIsCapturing(true);
+    }
+  }
+
+  function addManualLabel(label) {
+    if (captureDataRef.current.length > 0) {
+      captureDataRef.current[captureDataRef.current.length - 1].manualLabel = label;
+      alert(`Labeled last frame: ${label}`);
+    }
+  }
+
+  function copyDiagnostics() {
+    const data = {
+      timestamp: new Date().toISOString(),
+      poseBackend,
+      exercise: exerciseId,
+      fps: diagnosticData.fps,
+      inferenceLatency: diagnosticData.latency,
+      poseDetected: diagnosticData.poseDetected,
+      side: diagnosticData.side,
+      reps,
+      stage,
+      visibleCue: feedback.message,
+    };
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2)).catch(console.error);
+    alert('Diagnostics copied to clipboard');
+  }
+
   return (
     <main className={'coach-page ' + (previewMode ? 'coach-page-preview' : '')}>
+      {isDebugMode && (
+        <div className="debug-panel" style={{ background: '#000', color: '#0f0', padding: '10px', fontSize: '12px', fontFamily: 'monospace', position: 'fixed', top: 0, left: 0, zIndex: 9999 }}>
+          <div><strong>DEBUG MODE</strong></div>
+          <div>
+            Backend:
+            <select value={poseBackend} onChange={(e) => setPoseBackend(e.target.value)} style={{ background: '#333', color: '#0f0', marginLeft: '5px' }}>
+              <option value="mediapipe">MediaPipe</option>
+              <option value="movenet">MoveNet Thunder</option>
+            </select>
+          </div>
+          <div>FPS: {diagnosticData.fps} | Latency: {diagnosticData.latency}ms</div>
+          <div>Pose Detected: {diagnosticData.poseDetected ? 'YES' : 'NO'} | Side: {diagnosticData.side}</div>
+          <div>Exercise: {exerciseId} | Phase: {stage}</div>
+          <div>Reps: {reps} | Angle: {measurementValue}{measurementUnit}</div>
+          <div>Visible Cue: {feedback.message}</div>
+          <button onClick={copyDiagnostics} style={{ background: '#333', color: '#0f0', border: '1px solid #0f0', marginTop: '5px', padding: '2px 5px' }}>Copy Diagnostics</button>
+          
+          <div style={{ marginTop: '10px', borderTop: '1px solid #0f0', paddingTop: '5px' }}>
+            <button onClick={toggleCapture} style={{ background: isCapturing ? '#f00' : '#333', color: '#fff', border: '1px solid #0f0', padding: '2px 5px' }}>
+              {isCapturing ? 'Stop & Export JSONL' : 'Start Capture'}
+            </button>
+            {isCapturing && (
+              <div style={{ marginTop: '5px', display: 'flex', gap: '5px' }}>
+                <button onClick={() => addManualLabel('VALID_REP')} style={{ background: '#333', color: '#0f0' }}>VALID_REP</button>
+                <button onClick={() => addManualLabel('PARTIAL_REP')} style={{ background: '#333', color: '#0f0' }}>PARTIAL_REP</button>
+                <button onClick={() => addManualLabel('BAD_FORM')} style={{ background: '#333', color: '#0f0' }}>BAD_FORM</button>
+                <button onClick={() => addManualLabel('NOISE')} style={{ background: '#333', color: '#0f0' }}>NOISE</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {previewMode && (
         <div className="preview-mode-banner" role="status">
           <span className="preview-mode-pill"><ShieldAlert size={14} /> Preview Mode</span>
@@ -422,6 +565,8 @@ export default function CoachScreen({
               try { window.localStorage.setItem(VOICE_STORAGE_KEY, String(next)); } catch {}
               if (!next && speechSupported) {
                 voiceControllerRef.current?.cancel();
+              } else if (next && speechSupported) {
+                voiceControllerRef.current?.speak('Voice coach on.', { enabled: true, force: true });
               }
             }}
             type="button"

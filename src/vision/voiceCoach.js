@@ -132,13 +132,18 @@ export function createVoiceController({
     }
   }
 
-  function speak(message, { enabled = true, force = false } = {}) {
+  function speak(message, { enabled = true, force = false, priority = 4 } = {}) {
     if (disposed || !enabled || !supported() || !message) return false;
     const now = clock();
+    
+    // Priority rules:
+    // A higher priority message can interrupt a lower priority one.
+    // If not forced and not higher priority, respect throttleMs for the same message.
     if (!force && (message === lastSpokenCue || now - lastSpokenAt < throttleMs)) return false;
 
     lastSpokenCue = message;
     lastSpokenAt = now;
+    lastPriority = priority;
     try {
       cancel();
       const utterance = new windowRef.SpeechSynthesisUtterance(message);
@@ -159,9 +164,11 @@ export function createVoiceController({
     }
   }
 
+  let lastPriority = 0;
   function resetThrottle() {
     lastSpokenCue = '';
     lastSpokenAt = -Infinity;
+    lastPriority = 0;
   }
 
   function dispose() {
