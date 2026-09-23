@@ -1,5 +1,22 @@
 # BITS in Motion — Current Project State
 
+## Camera/voice validation hardening pass (23 September 2026)
+
+- **Branch:** `agent/codex-camera-v2`.
+- **Status:** local camera/voice validation implementation complete and verified; not merged or deployed.
+- **Scope:** camera engine, voice lifecycle and automated validation only. Homepage/dashboard/profile/recommendation/database/deployment ownership areas were not changed.
+- **Replay harness:** added deterministic MediaPipe-style 33-landmark replay fixtures under `src/vision/testing/` that drive the real `createExerciseDetector()` path, including production smoothing, visibility filtering, geometry, readiness gates and state machines. The replay data includes timestamps, visibility/presence and world landmarks.
+- **Crunch validation:** added realistic replay coverage for clean, slow, fast, partial, tiny movement, held-flexed, threshold rocking, jittered, temporary shoulder/hip loss, missing ankles, 10-rep, incomplete-final-rep, flexed-pause, mid-rep start and abrupt-reacquisition cases. Seeded variation tests cover body proportions, side visibility, camera tilt, movement speed, confidence and coordinate noise.
+- **Other exercise validation:** added squat, push-up and jumping-jack replay corpora for valid reps, partial movement, threshold jitter, pauses, 10-rep sequences, visibility loss and side/body variation. Push-ups now reject counting when the body line is sagged below the existing cue threshold instead of merely warning after counting.
+- **Readiness/counting fix:** invalid measurements caused by framing, lighting or body-line gates are now passed to counters as invalid, preventing squats/crunches from counting when the measurement was not ready.
+- **Subject continuity:** hardened tracking with continuous-motion and index-switch thresholds, then added a stress test for A lock, B entry, crossing, temporary A loss, delayed B reacquisition, scale change and later A reacquisition. The logic remains body-center/scale/landmark-continuity only; no face or biometric identity.
+- **Voice:** extracted a testable browser SpeechSynthesis controller with cached voice selection, `voiceschanged` handling, regional English priority (`en-IN`, then `en-GB`, then `en-US`), short natural cues and spoken count words. Voice remains local/browser-based with graceful unsupported-browser fallback.
+- **Camera lifecycle:** Camera Coach now treats unexpected camera track ending as a recoverable camera error, stops processing, clears overlays and cancels speech. Resize/orientation behavior was exercised without restarting the camera stream.
+- **Browser harness:** added `scripts/verify-camera-coach.mjs`, which starts an isolated local Vite server, mocks `getUserMedia`, mocks SpeechSynthesis, intercepts only the MediaPipe wrapper module, replays deterministic landmarks through `detectForVideo()`, verifies actual CoachScreen UI rep counts for all four camera exercises, exercises camera permission/unavailable/model-failure/track-ended paths, voice toggle/cancellation, navigation cleanup and 1920×1080, 1280×720, 640×480, 390×844 and 844×390 camera dimensions.
+- **Verification:** `npm test -- src/vision`: 10 suites / 109 passed. `npm test`: 19 suites / 909 passed. `node scripts/verify-camera-coach.mjs`: PASS. `npm run build`: PASS. `git diff --check`: PASS. `BROWSER_TEST_URL=http://127.0.0.1:5189 node scripts/verify-browser.mjs`: PASS with the existing mocked API/camera scope and screenshots in `/var/folders/d2/xq_721js4xq6jrfbfqmxp8gh0000gp/T/bits-motion-browser-0etEos`.
+- **Known limitations:** these tests substantially increase automated confidence but still use deterministic landmarks and mocked camera pixels. They do not prove physical MediaPipe accuracy for real bodies, clothing, rooms, camera lenses, device mounting, or lighting variation.
+- **Recommended next step:** run real-device physical QA for all four camera exercises before release, especially crunches on multiple body types and phone placements.
+
 ## Camera engine worktree — camera-v2 robustness pass (23 September 2026)
 
 - **Branch:** `agent/codex-camera-v2`.

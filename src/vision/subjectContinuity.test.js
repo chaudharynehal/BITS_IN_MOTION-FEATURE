@@ -55,4 +55,39 @@ describe('subject continuity', () => {
   it('ignores poses without enough visible body landmarks', () => {
     expect(describePose(pose(0.5, { visibility: 0.1 }))).toBeNull();
   });
+
+  it('survives second-person entry, crossing, temporary loss and legitimate reacquisition', () => {
+    const tracker = createSubjectTracker({ minStableFrames: 2, lostFrameLimit: 3 });
+
+    const a1 = pose(0.31, { scale: 0.34 });
+    const a2 = pose(0.33, { scale: 0.35 });
+    expect(tracker.update([a1])).toMatchObject({ index: 0, locked: false });
+    expect(tracker.update([a2])).toMatchObject({ index: 0, locked: true });
+
+    const bFar = pose(0.78, { scale: 0.3 });
+    const a3 = pose(0.35, { scale: 0.36 });
+    expect(tracker.update([bFar, a3])).toMatchObject({ index: 1, locked: true });
+
+    const bCrossing = pose(0.42, { scale: 0.29 });
+    const aCrossing = pose(0.37, { scale: 0.37 });
+    expect(tracker.update([bCrossing, aCrossing])).toMatchObject({ index: 1, locked: true });
+
+    const aLowVisibility = pose(0.38, { visibility: 0.12, scale: 0.37 });
+    expect(tracker.update([bCrossing, aLowVisibility])).toBeNull();
+    expect(tracker.update([bCrossing])).toBeNull();
+    expect(tracker.update([bCrossing])).toBeNull();
+    expect(tracker.snapshot()).toMatchObject({ locked: true, lostFrames: 3 });
+
+    expect(tracker.update([bCrossing])).toMatchObject({ index: 0, locked: false, reacquiring: true });
+    expect(tracker.update([pose(0.43, { scale: 0.31 })])).toMatchObject({ index: 0, locked: true });
+
+    expect(tracker.update([pose(0.45, { scale: 0.42 })])).toMatchObject({ index: 0, locked: true });
+
+    const aReturned = pose(0.28, { scale: 0.34 });
+    expect(tracker.update([aReturned])).toBeNull();
+    expect(tracker.update([aReturned])).toBeNull();
+    expect(tracker.update([aReturned])).toBeNull();
+    expect(tracker.update([aReturned])).toMatchObject({ index: 0, locked: false, reacquiring: true });
+    expect(tracker.update([pose(0.29, { scale: 0.35 })])).toMatchObject({ index: 0, locked: true });
+  });
 });

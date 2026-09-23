@@ -109,7 +109,7 @@ export function measurePushup(input, minVisibility = 0.55) {
     { floor: true, frameBrightness, requiredReason: 'full-body' },
   );
   return {
-    valid: side.visibility >= minVisibility && elbowAngle !== null && bodyAngle !== null && framingReason === 'ready',
+    valid: side.visibility >= minVisibility && elbowAngle !== null && bodyAngle !== null && bodyAngle >= 150 && framingReason === 'ready',
     visibility: side.visibility,
     side: side.side,
     primaryValue: elbowAngle,

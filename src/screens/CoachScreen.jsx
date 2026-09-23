@@ -5,40 +5,9 @@ import { clearPoseOverlay, drawPoseOverlay, initializePoseLandmarker } from '../
 import { createExerciseDetector, DETECTOR_CONFIGS } from '../vision/exerciseDetectors';
 import { createSubjectTracker } from '../vision/subjectContinuity';
 import { createVideoBrightnessSampler } from '../vision/frameReadiness';
+import { VOICE_CUES, VOICE_STORAGE_KEY, createVoiceController, repVoiceMessage, savedVoicePreference } from '../vision/voiceCoach';
 
 const INITIAL_FEEDBACK = { key: 'initial', message: 'Keep your full body visible and follow the setup guide', tone: 'neutral', priority: 0, until: 0 };
-const VOICE_STORAGE_KEY = 'bits-motion-voice-coach';
-const VOICE_CUES = {
-  ready: 'Ready. Start movement.',
-  'no-person': 'Move into frame.',
-  'move-farther': 'Move farther away.',
-  'move-closer': 'Move a little closer.',
-  'full-body': 'Keep your full body in frame.',
-  'key-joints': 'Keep the key joints visible.',
-  'adjust-angle': 'Adjust the camera angle.',
-  'improve-lighting': 'Improve the lighting.',
-  'overhead-room': 'Leave overhead room.',
-  lower: 'Go lower.',
-  'curl-more': 'Curl a little further.',
-  'body-line': 'Straighten your body line.',
-  wider: 'Open wider.',
-};
-
-function cancelSpeech() {
-  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-    try { window.speechSynthesis.cancel(); } catch {}
-  }
-}
-
-function savedVoicePreference() {
-  try {
-    return typeof window !== 'undefined'
-      && 'speechSynthesis' in window
-      && window.localStorage.getItem(VOICE_STORAGE_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
 
 const CAMERA_EXERCISES = [
   { id: 'squats', name: 'Squats', detail: 'Knee angle' },
@@ -63,10 +32,12 @@ export default function CoachScreen({
   const landmarkerRef = useRef(null);
   const streamRef = useRef(null);
   const animationRef = useRef(null);
+  const trackEndCleanupRef = useRef(null);
   const lastVideoTimeRef = useRef(-1);
   const detectorRef = useRef(createExerciseDetector(exerciseId));
   const subjectTrackerRef = useRef(createSubjectTracker());
   const brightnessSamplerRef = useRef(createVideoBrightnessSampler());
+  const voiceControllerRef = useRef(null);
   const feedbackRef = useRef(INITIAL_FEEDBACK);
   const sessionStartedAtRef = useRef(null);
   const framingInterruptionsRef = useRef(0);
@@ -92,32 +63,16 @@ export default function CoachScreen({
   const [videoAspect, setVideoAspect] = useState(4 / 3);
   const [previewSummary, setPreviewSummary] = useState(null);
   const [voiceEnabled, setVoiceEnabled] = useState(savedVoicePreference);
-  const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
-  const lastSpokenCueRef = useRef('');
-  const lastSpokenTimeRef = useRef(0);
   const lastSpokenRepRef = useRef(0);
+  if (voiceControllerRef.current === null) voiceControllerRef.current = createVoiceController();
+  const speechSupported = voiceControllerRef.current.supported();
 
   useEffect(() => {
     if (previewSummary) summaryRef.current?.showModal();
   }, [previewSummary]);
 
   const speakCue = useCallback((message, { force = false } = {}) => {
-    if (!voiceEnabled || !speechSupported || !message) return;
-    const now = performance.now();
-    if (!force && (message === lastSpokenCueRef.current || now - lastSpokenTimeRef.current < 5500)) return;
-    lastSpokenCueRef.current = message;
-    lastSpokenTimeRef.current = now;
-    try {
-      cancelSpeech();
-      const utterance = new SpeechSynthesisUtterance(message);
-      utterance.rate = 0.98;
-      utterance.pitch = 1;
-      utterance.volume = 0.9;
-      utterance.lang = 'en-IN';
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      // Speech is a progressive enhancement; visual coaching remains complete.
-    }
+    voiceControllerRef.current?.speak(message, { enabled: voiceEnabled && speechSupported, force });
   }, [speechSupported, voiceEnabled]);
 
   const publishFeedback = useCallback((cue) => {
@@ -148,9 +103,8 @@ export default function CoachScreen({
     lastCueKeyRef.current = null;
     lastMeasurementRef.current = null;
     lastSpokenRepRef.current = 0;
-    lastSpokenCueRef.current = '';
-    lastSpokenTimeRef.current = 0;
-    cancelSpeech();
+    voiceControllerRef.current?.resetThrottle();
+    voiceControllerRef.current?.cancel();
     feedbackRef.current = INITIAL_FEEDBACK;
     lastUiStateRef.current = { at: 0, reps: 0, stage: 'Finding start', measurementValue: null, measurementUnit: exerciseId === 'jumping-jacks' ? '×' : '°' };
     setReps(0);
@@ -195,11 +149,12 @@ export default function CoachScreen({
       modelRequestRef.current += 1;
       cameraRequestRef.current?.abort();
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      releaseTrackEndListeners();
       stopCamera(streamRef.current, videoRef.current);
       streamRef.current = null;
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
-      cancelSpeech();
+      voiceControllerRef.current?.dispose();
     };
   }, [loadModel]);
 
@@ -233,7 +188,7 @@ export default function CoachScreen({
 
         if (state.reps > lastSpokenRepRef.current) {
           lastSpokenRepRef.current = state.reps;
-          speakCue(`Rep ${state.reps}`, { force: true });
+          speakCue(repVoiceMessage(state.reps), { force: true });
         }
 
         const nextUi = {
@@ -275,6 +230,35 @@ export default function CoachScreen({
     animationRef.current = requestAnimationFrame(processFrame);
   }, [publishFeedback, speakCue]);
 
+  function releaseTrackEndListeners() {
+    trackEndCleanupRef.current?.();
+    trackEndCleanupRef.current = null;
+  }
+
+  function handleUnexpectedTrackEnd(stream) {
+    if (!mountedRef.current || streamRef.current !== stream) return;
+    releaseTrackEndListeners();
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    animationRef.current = null;
+    stopCamera(streamRef.current, videoRef.current);
+    streamRef.current = null;
+    brightnessSamplerRef.current.reset();
+    clearPoseOverlay(canvasRef.current);
+    setCameraStatus('error');
+    setCameraError('The camera stopped unexpectedly. Check your camera and try again.');
+    voiceControllerRef.current?.cancel();
+  }
+
+  function watchStreamEnd(stream) {
+    releaseTrackEndListeners();
+    const tracks = stream?.getVideoTracks?.() || stream?.getTracks?.() || [];
+    const handleEnded = () => handleUnexpectedTrackEnd(stream);
+    tracks.forEach((track) => track.addEventListener?.('ended', handleEnded));
+    trackEndCleanupRef.current = () => {
+      tracks.forEach((track) => track.removeEventListener?.('ended', handleEnded));
+    };
+  }
+
   async function handleStartCamera() {
     if (cameraRequestRef.current || streamRef.current || !DETECTOR_CONFIGS[exerciseId]) return;
     if (!isCameraSupported()) {
@@ -293,12 +277,13 @@ export default function CoachScreen({
         return;
       }
       streamRef.current = stream;
+      watchStreamEnd(stream);
       subjectTrackerRef.current.reset();
       brightnessSamplerRef.current.reset();
       sessionStartedAtRef.current = Date.now();
       lastVideoTimeRef.current = -1;
       setCameraStatus('running');
-      speakCue('Ready. Start movement.', { force: true });
+      speakCue(VOICE_CUES.ready, { force: true });
       animationRef.current = requestAnimationFrame(processFrame);
     } catch (error) {
       if (!mountedRef.current || request.signal.aborted) return;
@@ -313,6 +298,7 @@ export default function CoachScreen({
   function stopSessionCamera() {
     cameraRequestRef.current?.abort();
     cameraRequestRef.current = null;
+    releaseTrackEndListeners();
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     animationRef.current = null;
     stopCamera(streamRef.current, videoRef.current);
@@ -320,7 +306,7 @@ export default function CoachScreen({
     brightnessSamplerRef.current.reset();
     clearPoseOverlay(canvasRef.current);
     setCameraStatus('idle');
-    cancelSpeech();
+    voiceControllerRef.current?.cancel();
   }
 
   function handleReset() {
@@ -335,9 +321,8 @@ export default function CoachScreen({
     lastCueKeyRef.current = null;
     lastMeasurementRef.current = null;
     lastSpokenRepRef.current = 0;
-    lastSpokenCueRef.current = '';
-    lastSpokenTimeRef.current = 0;
-    cancelSpeech();
+    voiceControllerRef.current?.resetThrottle();
+    voiceControllerRef.current?.cancel();
     const next = { ...INITIAL_FEEDBACK, until: performance.now() + 700 };
     feedbackRef.current = next;
     setFeedback(next);
@@ -436,7 +421,7 @@ export default function CoachScreen({
               setVoiceEnabled(next);
               try { window.localStorage.setItem(VOICE_STORAGE_KEY, String(next)); } catch {}
               if (!next && speechSupported) {
-                cancelSpeech();
+                voiceControllerRef.current?.cancel();
               }
             }}
             type="button"

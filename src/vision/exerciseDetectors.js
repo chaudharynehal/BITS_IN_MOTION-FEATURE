@@ -78,6 +78,12 @@ function phaseLabel(exerciseId, phase) {
 }
 
 function feedbackFor(exerciseId, measurement, state) {
+  if (exerciseId === 'pushups'
+    && measurement.framingReason === 'ready'
+    && Number.isFinite(measurement.bodyAngle)
+    && measurement.bodyAngle < 150) {
+    return { key: 'body-line', message: 'Bring your hips into a straighter line', tone: 'warning', priority: 6, holdMs: 850 };
+  }
   if (!measurement.valid || measurement.framingReason && measurement.framingReason !== 'ready') {
     const framing = {
       'no-person': ['no-person', 'No person detected — step into view'],
@@ -161,17 +167,19 @@ export function createExerciseDetector(exerciseId = 'squats', options = {}) {
     const rawMeasurement = measurementProvider(landmarks);
     const measurement = shouldSmooth ? smoothMeasurement(rawMeasurement) : rawMeasurement;
     const classification = classify(id, measurement);
+    const counterVisibility = measurement.valid ? measurement.visibility : 0;
+    const counterValue = measurement.valid ? measurement.primaryValue : null;
     const state = id === 'squats'
-      ? counter.update({ angle: measurement.primaryValue, visibility: measurement.visibility, timestamp })
+      ? counter.update({ angle: counterValue, visibility: counterVisibility, timestamp })
       : id === 'crunches'
         ? counter.update({
-          angle: measurement.primaryValue,
+          angle: counterValue,
           shoulderKneeRatio: measurement.shoulderKneeRatio,
           torsoCompression: measurement.torsoCompression,
-          visibility: measurement.visibility,
+          visibility: counterVisibility,
           timestamp,
         })
-        : counter.update({ classification, visibility: measurement.visibility, timestamp });
+        : counter.update({ classification, visibility: counterVisibility, timestamp });
     return {
       ...state,
       phaseLabel: phaseLabel(id, state.phase),

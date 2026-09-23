@@ -62,6 +62,8 @@ export function createSubjectTracker(overrides = {}) {
     minStableFrames: 3,
     lostFrameLimit: 12,
     matchThreshold: 0.95,
+    continuousThreshold: 0.38,
+    switchThreshold: 0.22,
     acquisitionThreshold: 0.8,
     ...overrides,
   };
@@ -118,20 +120,29 @@ export function createSubjectTracker(overrides = {}) {
         .sort((a, b) => a.score - b.score);
       const match = scored[0];
       if (match && match.score <= config.matchThreshold) {
-        track = {
-          signature: match.candidate.signature,
-          index: match.candidate.index,
-        };
-        lostFrames = 0;
-        pending = null;
-        pendingFrames = 0;
-        return {
-          index: match.candidate.index,
-          landmarks: match.candidate.landmarks,
-          worldLandmarks: match.candidate.worldLandmarks,
-          locked: true,
-          reacquiring: false,
-        };
+        if (match.score > config.continuousThreshold
+          || (match.candidate.index !== track.index && match.score > config.switchThreshold)) {
+          lostFrames += 1;
+          if (lostFrames <= config.lostFrameLimit) return null;
+          track = null;
+          pending = null;
+          pendingFrames = 0;
+        } else {
+          track = {
+            signature: match.candidate.signature,
+            index: match.candidate.index,
+          };
+          lostFrames = 0;
+          pending = null;
+          pendingFrames = 0;
+          return {
+            index: match.candidate.index,
+            landmarks: match.candidate.landmarks,
+            worldLandmarks: match.candidate.worldLandmarks,
+            locked: true,
+            reacquiring: false,
+          };
+        }
       }
 
       lostFrames += 1;
