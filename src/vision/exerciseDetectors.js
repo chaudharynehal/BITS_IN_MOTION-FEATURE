@@ -135,17 +135,23 @@ export function createExerciseDetector(exerciseId = 'squats', options = {}) {
         : createJumpingJackCounter();
 
   let measurementWindow = [];
+  let lastValidTimestamp = 0;
 
   function smoothMeasurement(measurement, timestamp) {
     if (measurement.valid && measurement.side) {
       lockedSide = measurement.side;
     }
 
-    // Purge elements older than 500ms
-    measurementWindow = measurementWindow.filter(item => timestamp - item.timestamp <= 500);
-
     if (measurement.valid) {
       measurementWindow.push({ ...measurement, timestamp });
+      lastValidTimestamp = timestamp;
+      if (measurementWindow.length > 5) {
+        measurementWindow.shift();
+      }
+    } else {
+      if (timestamp - lastValidTimestamp > 500) {
+        measurementWindow = [];
+      }
     }
 
     if (measurementWindow.length === 0) {

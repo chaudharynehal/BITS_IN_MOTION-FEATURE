@@ -119,7 +119,8 @@ export function createCrunchCounter(overrides = {}) {
   }
 
   function hasReturnedToExtended(sample) {
-    if (sample.angle < config.extendedAngle) return false;
+    const targetAngle = baselineAngle !== null ? Math.min(config.extendedAngle, baselineAngle - config.returnRange) : config.extendedAngle;
+    if (sample.angle < targetAngle) return false;
     if (baselineShoulderKneeRatio !== null && sample.shoulderKneeRatio !== null) {
       return sample.shoulderKneeRatio >= baselineShoulderKneeRatio - config.returnRatioTolerance;
     }

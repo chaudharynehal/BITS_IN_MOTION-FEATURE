@@ -216,11 +216,14 @@ export function createVoiceController({
   function _doSpeak(message, priority, voiceMode = 'coach') {
     const gen = ++utteranceGeneration;
     try {
-      // Only cancel if we're replacing a lower-priority utterance
-      if (activePriority > 0 && activePriority < priority) {
-        cancel(`preempted by priority ${priority}`, 'speak-preempt');
-      } else if (activePriority > 0) {
-        cancel('new utterance', 'speak-replace');
+      if (activePriority > priority) {
+        // Drop lower-priority cue, do not interrupt the higher priority one
+        return 0;
+      }
+
+      // If we are replacing an existing utterance of equal or lower priority
+      if (activePriority > 0) {
+        cancel(activePriority < priority ? `preempted by priority ${priority}` : 'new equal priority utterance', 'speak-replace');
       }
 
       const utterance = new windowRef.SpeechSynthesisUtterance(message);
