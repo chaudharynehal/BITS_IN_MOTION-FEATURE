@@ -134,7 +134,8 @@ export function createCrunchCounter(overrides = {}) {
 
   function classificationFor(sample) {
     if (baselineAngle === null) {
-      return sample.angle >= config.extendedAngle ? 'extended' : 'transition';
+      // If no baseline, just wait for a stable position that is somewhat extended (e.g. >= 115)
+      return sample.angle >= 115 ? 'extended' : 'transition';
     }
     if (hasReturnedToExtended(sample)) return 'extended';
     if (hasFullFlexion(sample)) return 'flexed';

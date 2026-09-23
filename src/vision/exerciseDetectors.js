@@ -122,7 +122,8 @@ function feedbackFor(exerciseId, measurement, state) {
 
 export function createExerciseDetector(exerciseId = 'squats', options = {}) {
   const id = DETECTOR_CONFIGS[exerciseId] ? exerciseId : 'squats';
-  const measurementProvider = options.measurementProvider || ((landmarks) => measureExercise(id, landmarks));
+  let lockedSide = null;
+  const measurementProvider = options.measurementProvider || ((landmarks) => measureExercise(id, landmarks, { preferredSide: lockedSide }));
   const shouldSmooth = !options.measurementProvider || options.smoothMeasurements === true;
   const counter = id === 'squats'
     ? createSquatCounter()
@@ -132,10 +133,14 @@ export function createExerciseDetector(exerciseId = 'squats', options = {}) {
       startState: id === 'pushups' ? 'top' : id === 'crunches' ? 'extended' : 'closed',
       targetState: id === 'pushups' ? 'bottom' : id === 'crunches' ? 'curled' : 'open',
       minRepIntervalMs: id === 'jumping-jacks' ? 500 : 700,
+      minCycleDurationMs: id === 'pushups' ? 200 : 350,
     });
   let measurementWindow = [];
 
   function smoothMeasurement(measurement) {
+    if (measurement.valid && measurement.side) {
+      lockedSide = measurement.side;
+    }
     if (!measurement.valid) {
       measurementWindow = [];
       return measurement;
@@ -184,6 +189,7 @@ export function createExerciseDetector(exerciseId = 'squats', options = {}) {
       ...state,
       phaseLabel: phaseLabel(id, state.phase),
       measurement,
+      rawMeasurement,
       feedback: feedbackFor(id, measurement, state),
     };
   }

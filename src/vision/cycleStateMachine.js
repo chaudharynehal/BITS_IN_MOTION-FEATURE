@@ -73,13 +73,21 @@ export function createCycleCounter(overrides = {}) {
       reachedTarget = false;
       const cycleDuration = targetReachedAt === null ? 0 : timestamp - targetReachedAt;
       targetReachedAt = null;
-      if (cycleDuration >= config.minCycleDurationMs
-        && cycleDuration <= config.maxCycleDurationMs
-        && timestamp - lastRepAt >= config.minRepIntervalMs) {
+
+      let rejectReason = null;
+      if (cycleDuration < config.minCycleDurationMs) rejectReason = 'MIN_PHASE_TIME';
+      else if (cycleDuration > config.maxCycleDurationMs) rejectReason = 'MAX_PHASE_TIME';
+      else if (timestamp - lastRepAt < config.minRepIntervalMs) rejectReason = 'COOLDOWN_ACTIVE';
+
+      if (!rejectReason) {
         reps += 1;
         lastRepAt = timestamp;
         event = 'rep';
+      } else {
+        event = 'rejected';
       }
+      clearCandidate();
+      return { reps, phase, event, classification, rejectReason };
     }
     clearCandidate();
     return { reps, phase, event, classification };

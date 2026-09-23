@@ -70,6 +70,7 @@ export function createVoiceController({
   windowRef = globalThis.window,
   clock = () => performance.now(),
   throttleMs = 5500,
+  onTelemetry = () => {},
 } = {}) {
   const supported = () => isSpeechSupported(windowRef);
   let lastSpokenCue = '';
@@ -78,7 +79,41 @@ export function createVoiceController({
   let disposed = false;
   let previousVoicesChanged = null;
 
+  let debugData = {
+    supported: supported(),
+    voicesLoaded: 0,
+    selectedVoiceName: 'None',
+    selectedVoiceLang: 'None',
+    pending: false,
+    speaking: false,
+    paused: false,
+    lastRequested: '',
+    lastStartText: '',
+    lastStartAt: 0,
+    lastEndText: '',
+    lastEndAt: 0,
+    lastErrorText: '',
+    lastErrorAt: 0,
+  };
+
   const speech = () => windowRef?.speechSynthesis;
+
+  function emitTelemetry() {
+    if (!supported()) return;
+    const synth = speech();
+    if (synth) {
+      debugData.pending = synth.pending;
+      debugData.speaking = synth.speaking;
+      debugData.paused = synth.paused;
+    }
+    const voice = selectCoachVoice(cachedVoices());
+    if (voice) {
+      debugData.selectedVoiceName = voice.name;
+      debugData.selectedVoiceLang = voice.lang;
+    }
+    debugData.voicesLoaded = cachedVoices().length;
+    onTelemetry({ ...debugData });
+  }
 
   function refreshVoices() {
     if (!supported()) {
@@ -90,6 +125,7 @@ export function createVoiceController({
     } catch {
       voices = [];
     }
+    emitTelemetry();
     return voices;
   }
 
@@ -127,23 +163,14 @@ export function createVoiceController({
     if (!supported()) return;
     try {
       speech().cancel();
+      emitTelemetry();
     } catch {
-      // Speech is optional. Visual cues remain complete.
+      // Speech is optional
     }
   }
 
-  function speak(message, { enabled = true, force = false, priority = 4 } = {}) {
-    if (disposed || !enabled || !supported() || !message) return false;
-    const now = clock();
-    
-    // Priority rules:
-    // A higher priority message can interrupt a lower priority one.
-    // If not forced and not higher priority, respect throttleMs for the same message.
-    if (!force && (message === lastSpokenCue || now - lastSpokenAt < throttleMs)) return false;
-
-    lastSpokenCue = message;
-    lastSpokenAt = now;
-    lastPriority = priority;
+  function directTestSpeak(message) {
+    if (disposed || !supported() || !message) return false;
     try {
       cancel();
       const utterance = new windowRef.SpeechSynthesisUtterance(message);
@@ -151,17 +178,50 @@ export function createVoiceController({
       if (voice) {
         utterance.voice = voice;
         utterance.lang = voice.lang;
-      } else {
-        utterance.lang = 'en-IN';
       }
       utterance.rate = 0.98;
       utterance.pitch = 1;
       utterance.volume = 0.9;
+
+      utterance.onstart = () => {
+        debugData.lastStartText = message;
+        debugData.lastStartAt = clock();
+        emitTelemetry();
+      };
+      utterance.onend = () => {
+        debugData.lastEndText = message;
+        debugData.lastEndAt = clock();
+        emitTelemetry();
+      };
+      utterance.onerror = (e) => {
+        debugData.lastErrorText = `Error [${e.error}]: ${message}`;
+        debugData.lastErrorAt = clock();
+        emitTelemetry();
+      };
+
+      debugData.lastRequested = message;
       speech().speak(utterance);
+      emitTelemetry();
       return true;
-    } catch {
+    } catch (e) {
+      debugData.lastErrorText = `Throw: ${e.message}`;
+      debugData.lastErrorAt = clock();
+      emitTelemetry();
       return false;
     }
+  }
+
+  function speak(message, { enabled = true, force = false, priority = 4 } = {}) {
+    if (disposed || !enabled || !supported() || !message) return false;
+    const now = clock();
+
+    if (!force && (message === lastSpokenCue || now - lastSpokenAt < throttleMs)) return false;
+
+    lastSpokenCue = message;
+    lastSpokenAt = now;
+    lastPriority = priority;
+
+    return directTestSpeak(message);
   }
 
   let lastPriority = 0;
@@ -187,6 +247,7 @@ export function createVoiceController({
     resetThrottle,
     selectVoice: () => selectCoachVoice(cachedVoices()),
     speak,
+    directTestSpeak,
     supported,
     snapshot: () => ({ lastSpokenCue, lastSpokenAt, voiceCount: cachedVoices().length, disposed }),
   };

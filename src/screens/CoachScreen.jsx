@@ -63,6 +63,7 @@ export default function CoachScreen({
   const [isCapturing, setIsCapturing] = useState(false);
 
   const [modelStatus, setModelStatus] = useState('loading');
+  const [movenetStatus, setMovenetStatus] = useState({ status: 'NOT_REQUESTED', error: null });
   const [modelNote, setModelNote] = useState('Loading the lightweight pose model…');
   const [cameraStatus, setCameraStatus] = useState('idle');
   const [cameraError, setCameraError] = useState('');
@@ -75,7 +76,8 @@ export default function CoachScreen({
   const [previewSummary, setPreviewSummary] = useState(null);
   const [voiceEnabled, setVoiceEnabled] = useState(savedVoicePreference);
   const lastSpokenRepRef = useRef(0);
-  if (voiceControllerRef.current === null) voiceControllerRef.current = createVoiceController();
+  const [voiceTelemetry, setVoiceTelemetry] = useState({});
+  if (voiceControllerRef.current === null) voiceControllerRef.current = createVoiceController({ onTelemetry: (data) => setVoiceTelemetry(data) });
   const speechSupported = voiceControllerRef.current.supported();
 
   useEffect(() => {
@@ -89,7 +91,7 @@ export default function CoachScreen({
   const publishFeedback = useCallback((cue) => {
     const now = performance.now();
     const current = feedbackRef.current;
-    
+
     if (cue.message === current.message) {
       if (!current.spoken && (now - current.firstSeen) > 400) {
         current.spoken = true;
@@ -103,16 +105,16 @@ export default function CoachScreen({
 
     const next = { ...cue, firstSeen: now, spoken: false, until: now + (cue.holdMs || 700) };
     feedbackRef.current = next;
-    
+
     if (cue.key && cue.key !== lastCueKeyRef.current) {
       cueCountsRef.current[cue.key] = (cueCountsRef.current[cue.key] || 0) + 1;
       lastCueKeyRef.current = cue.key;
     }
-    
+
     if (mountedRef.current) setFeedback(next);
 
     // High priority readiness (6) or success (7+) cues speak faster, but let's just make success instant
-    // framing cues (priority 6) are 400ms stable. 
+    // framing cues (priority 6) are 400ms stable.
     if (cue.priority >= 7) {
       next.spoken = true;
       if (VOICE_CUES[cue.key]) speakCue(VOICE_CUES[cue.key], { force: true, priority: cue.priority });
@@ -152,6 +154,8 @@ export default function CoachScreen({
     try {
       const provider = await createPoseProvider(poseBackend, () => {
         if (mountedRef.current) setModelNote('GPU unavailable—switching to compatible CPU mode…');
+      }, (statusUpdate) => {
+        if (mountedRef.current) setMovenetStatus(statusUpdate);
       });
       if (!mountedRef.current || modelRequestRef.current !== request) {
         provider.close();
@@ -208,7 +212,7 @@ export default function CoachScreen({
         const now = performance.now();
         const brightness = brightnessSamplerRef.current.sample(video, now);
         const result = await provider.detect(video, now);
-        
+
         if (!mountedRef.current || streamRef.current !== video.srcObject) {
           processingRef.current = false;
           return;
@@ -231,8 +235,19 @@ export default function CoachScreen({
           const avgLatency = lastLatenciesRef.current.reduce((a, b) => a + b.latency, 0) / lastLatenciesRef.current.length;
           const oldest = lastLatenciesRef.current[0].time;
           const fps = lastLatenciesRef.current.length > 1 ? (lastLatenciesRef.current.length - 1) * 1000 / Math.max(1, now - oldest) : 0;
-          setDiagnosticData({ fps: Math.round(fps), latency: Math.round(avgLatency), poseDetected: !!landmarks, side: measurement.side || 'N/A' });
-          
+          setDiagnosticData((prev) => {
+            const updates = {
+              fps: Math.round(fps),
+              latency: Math.round(avgLatency),
+              poseDetected: !!landmarks,
+              side: measurement.side || 'N/A',
+              rawAngle: state.rawMeasurement?.primaryValue
+            };
+            if (state.event === 'rejected') updates.lastRejection = state.rejectReason || 'NOT_READY';
+            else if (state.event) updates.lastTransition = state.event;
+            return { ...prev, ...updates };
+          });
+
           if (isCapturing) {
             captureDataRef.current.push({
               timestamp: now,
@@ -242,6 +257,8 @@ export default function CoachScreen({
               angles: measurement,
               movementPhase: state.phaseLabel,
               repCount: state.reps,
+              event: state.event,
+              rejectReason: state.rejectReason,
               manualLabel: null,
               landmarks: landmarks ? landmarks.map(l => l ? { x: l.x, y: l.y, z: l.z, v: l.visibility } : null) : null
             });
@@ -498,6 +515,12 @@ export default function CoachScreen({
       reps,
       stage,
       visibleCue: feedback.message,
+      lastTransition: diagnosticData.lastTransition,
+      lastRejection: diagnosticData.lastRejection,
+      smoothedAngle: measurementValue,
+      rawAngle: diagnosticData.rawAngle,
+      movenetStatus,
+      speechTelemetry: voiceTelemetry,
     };
     navigator.clipboard.writeText(JSON.stringify(data, null, 2)).catch(console.error);
     alert('Diagnostics copied to clipboard');
@@ -518,10 +541,30 @@ export default function CoachScreen({
           <div>FPS: {diagnosticData.fps} | Latency: {diagnosticData.latency}ms</div>
           <div>Pose Detected: {diagnosticData.poseDetected ? 'YES' : 'NO'} | Side: {diagnosticData.side}</div>
           <div>Exercise: {exerciseId} | Phase: {stage}</div>
-          <div>Reps: {reps} | Angle: {measurementValue}{measurementUnit}</div>
+          <div>Reps: {reps}</div>
+          <div>Smoothed Angle: {measurementValue}{measurementUnit} | Raw: {diagnosticData.rawAngle ? Math.round(diagnosticData.rawAngle * 10)/10 : 'N/A'}{measurementUnit}</div>
           <div>Visible Cue: {feedback.message}</div>
+          <div>Last Transition: {diagnosticData.lastTransition || 'None'}</div>
+          {diagnosticData.lastRejection && <div style={{ color: '#f00' }}>Last Rejection: {diagnosticData.lastRejection}</div>}
+
+          {poseBackend === 'movenet' && (
+            <div>MoveNet Status: {movenetStatus.status} {movenetStatus.error ? `(${movenetStatus.error})` : ''}</div>
+          )}
+
+          <div style={{ marginTop: '5px', borderTop: '1px solid #0f0', paddingTop: '5px' }}>
+            <div><strong>VOICE DEBUG</strong></div>
+            <div>Supported: {voiceTelemetry.supported ? 'YES' : 'NO'} | Voices: {voiceTelemetry.voicesLoaded}</div>
+            <div>Voice: {voiceTelemetry.selectedVoiceName} ({voiceTelemetry.selectedVoiceLang})</div>
+            <div>Pending: {voiceTelemetry.pending ? 'Y':'N'} | Speaking: {voiceTelemetry.speaking ? 'Y':'N'} | Paused: {voiceTelemetry.paused ? 'Y':'N'}</div>
+            <div>Last Req: {voiceTelemetry.lastRequested}</div>
+            <div>Last Start: {voiceTelemetry.lastStartText}</div>
+            <div>Last End: {voiceTelemetry.lastEndText}</div>
+            {voiceTelemetry.lastErrorText && <div style={{ color: '#f00' }}>Error: {voiceTelemetry.lastErrorText}</div>}
+            <button onClick={() => voiceControllerRef.current?.directTestSpeak('Voice test successful.')} style={{ background: '#333', color: '#0f0', border: '1px solid #0f0', marginTop: '5px', padding: '2px 5px' }}>TEST VOICE</button>
+          </div>
+
           <button onClick={copyDiagnostics} style={{ background: '#333', color: '#0f0', border: '1px solid #0f0', marginTop: '5px', padding: '2px 5px' }}>Copy Diagnostics</button>
-          
+
           <div style={{ marginTop: '10px', borderTop: '1px solid #0f0', paddingTop: '5px' }}>
             <button onClick={toggleCapture} style={{ background: isCapturing ? '#f00' : '#333', color: '#fff', border: '1px solid #0f0', padding: '2px 5px' }}>
               {isCapturing ? 'Stop & Export JSONL' : 'Start Capture'}
