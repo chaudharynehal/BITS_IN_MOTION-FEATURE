@@ -429,7 +429,7 @@ try {
     await send('Page.navigate', { url: origin + '/#terms' });
     await ready(() => evaluate('Boolean(document.querySelector(".terms-page"))'));
     assert((await body()).includes('Terms and Conditions'));
-    assert((await body()).includes('Last updated: 22 September 2026'));
+    assert((await body()).includes('Last updated: 24 September 2026'));
     assert((await body()).includes('Governing law: India'));
     assert.equal(await evaluate('document.querySelectorAll(".terms-page .terms-section").length'), 13);
     assert.equal(await evaluate('document.querySelector(' + JSON.stringify('a.trust-inline-link[href="#privacy"]') + ').textContent'), 'Privacy Policy');
@@ -445,7 +445,7 @@ try {
     assert((await body()).includes('If you use Guest Mode'));
     assert((await body()).includes('If you sign in with Google'));
     assert((await body()).includes('If you join the leaderboard'));
-    assert.equal(await evaluate('document.querySelectorAll(".privacy-page .terms-section").length'), 9);
+    assert.equal(await evaluate('document.querySelectorAll(".privacy-page .terms-section").length'), 8);
     await reload();
     await ready(() => evaluate('Boolean(document.querySelector(".privacy-page"))'));
 
