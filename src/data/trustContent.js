@@ -1,4 +1,4 @@
-export const TRUST_PUBLICATION_DATE = '22 September 2026';
+export const TRUST_PUBLICATION_DATE = '24 September 2026';
 
 export const PRIVACY_SECTIONS = [
   {
@@ -89,12 +89,6 @@ export const PRIVACY_SECTIONS = [
       { lead: 'Guest data:', text: ' remains in the browser until it is removed. Clearing your browser data or cache will permanently delete this information.' },
       { lead: 'Signed-in data:', text: ' is retained to provide account sync, saved plans, and progress history. The application does not currently provide a self-service account export or deletion control.' },
       { lead: 'Camera data:', text: ' is not retained. Preview and live camera frames are discarded as they are processed, and the stream is released when camera use ends.' },
-    ],
-  },
-  {
-    title: 'Contact us',
-    paragraphs: [
-      'For privacy questions or a request concerning signed-in account data, contact the BITS in Motion team through the official Smart India Hackathon project channel through which the application was shared. No separate public contact address is published in the application.',
     ],
   },
   {

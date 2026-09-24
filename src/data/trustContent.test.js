@@ -9,9 +9,9 @@ import {
 const textOf = (value) => JSON.stringify(value);
 
 describe('Trust & Safety publication content', () => {
-  it('publishes all 9 Privacy Policy sections and the approved camera and data-mode disclosures', () => {
-    expect(TRUST_PUBLICATION_DATE).toBe('22 September 2026');
-    expect(PRIVACY_SECTIONS).toHaveLength(9);
+  it('publishes all 8 Privacy Policy sections and the approved camera and data-mode disclosures', () => {
+    expect(TRUST_PUBLICATION_DATE).toBe('24 September 2026');
+    expect(PRIVACY_SECTIONS).toHaveLength(8);
     expect(PRIVACY_SECTIONS.map((section) => section.title)).toEqual([
       'Who we are',
       'Camera usage: nothing is recorded or stored',
@@ -20,7 +20,6 @@ describe('Trust & Safety publication content', () => {
       'Third party services we use',
       'Your rights and choices',
       'Data retention',
-      'Contact us',
       'Changes to this policy',
     ]);
     const privacyText = textOf(PRIVACY_SECTIONS);
