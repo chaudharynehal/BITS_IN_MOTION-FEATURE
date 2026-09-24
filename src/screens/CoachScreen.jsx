@@ -547,7 +547,7 @@ export default function CoachScreen({
           <div>Reps: {reps}</div>
           <div>Metric: {measurementValue}{measurementUnit} | Raw: {diagnosticData.rawAngle ? Math.round(diagnosticData.rawAngle * 10)/10 : 'N/A'}{measurementUnit}</div>
           <div>Visible Cue: {feedback.message}</div>
-          <div>Stable Cue: {voiceTelemetry.lastRequested || 'None'}</div>
+          <div>Stable Cue: {voiceControllerRef.current?.snapshot().lastSpokenCue || 'None'}</div>
           <div>Last Transition: {diagnosticData.lastTransition || 'None'}</div>
           {diagnosticData.lastRejection && <div style={{ color: '#f00' }}>Last Rejection: {diagnosticData.lastRejection}</div>}
 
@@ -555,15 +555,23 @@ export default function CoachScreen({
             <div><strong>VOICE DEBUG</strong></div>
             <div>Supported: {voiceTelemetry.supported ? 'YES' : 'NO'} | Voices: {voiceTelemetry.voicesLoaded}</div>
             <div>Voice: {voiceTelemetry.selectedVoiceName} ({voiceTelemetry.selectedVoiceLang})</div>
-            <div>Pending: {voiceTelemetry.pending ? 'Y':'N'} | Speaking: {voiceTelemetry.speaking ? 'Y':'N'} | Paused: {voiceTelemetry.paused ? 'Y':'N'}</div>
-            <div>Last Req: {voiceTelemetry.lastRequested}</div>
-            <div>Last Start: {voiceTelemetry.lastStartText}</div>
-            <div>Last End: {voiceTelemetry.lastEndText}</div>
-            {voiceTelemetry.lastErrorText && <div style={{ color: '#f00' }}>Error: {voiceTelemetry.lastErrorText}</div>}
-            {voiceTelemetry.lastCancelReason && <div style={{ color: '#ff0' }}>Cancel: {voiceTelemetry.lastCancelReason} (src: {voiceTelemetry.lastCancelSource})</div>}
-            <div>Utterance ID: {voiceTelemetry.utteranceId || 0}</div>
+            
+            <div style={{ marginTop: '5px', borderTop: '1px dashed #0f0', paddingTop: '5px' }}>
+              <div>SPEECH:</div>
+              <div>Pending: {voiceTelemetry.pending ? 'Y':'N'} | Speaking: {voiceTelemetry.speaking ? 'Y':'N'} | Paused: {voiceTelemetry.paused ? 'Y':'N'}</div>
+              <div>Last Req: {voiceTelemetry.lastRequested}</div>
+              <div>Last Start: {voiceTelemetry.lastStartText}</div>
+              <div>Last End: {voiceTelemetry.lastEndText}</div>
+              {voiceTelemetry.lastErrorText && <div style={{ color: '#f00' }}>Error: {voiceTelemetry.lastErrorText}</div>}
+              {voiceTelemetry.lastCancelReason && <div style={{ color: '#ff0' }}>Cancel: {voiceTelemetry.lastCancelReason} (src: {voiceTelemetry.lastCancelSource})</div>}
+            </div>
+
+            <div style={{ marginTop: '5px', borderTop: '1px dashed #0f0', paddingTop: '5px' }}>
+              <div>QUEUE:</div>
+              <div>Queued Text: {voiceTelemetry.queuedText || 'None'}</div>
+            </div>
+            
             <button onClick={() => voiceControllerRef.current?.directTestSpeak('Voice test successful.')} style={{ background: '#333', color: '#0f0', border: '1px solid #0f0', marginTop: '5px', padding: '2px 5px' }}>TEST VOICE</button>
-            <button onClick={() => voiceControllerRef.current?.directTestSpeak('Testing default voice.', 'auto')} style={{ background: '#333', color: '#0f0', border: '1px solid #0f0', marginTop: '5px', marginLeft: '5px', padding: '2px 5px' }}>TEST DEFAULT</button>
           </div>
 
           <button onClick={copyDiagnostics} style={{ background: '#333', color: '#0f0', border: '1px solid #0f0', marginTop: '5px', padding: '2px 5px' }}>Copy Diagnostics</button>

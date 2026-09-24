@@ -38,7 +38,7 @@ function fakeWindow({ voices = [], storageValue = null } = {}) {
 describe('voice coach', () => {
   it('speaks when enabled and applies selected voice settings', () => {
     let now = 1000;
-    const win = fakeWindow({ voices: [{ name: 'Natural India', lang: 'en-IN' }] });
+    const win = fakeWindow({ voices: [{ name: 'Natural India', lang: 'en-IN', default: true }] });
     const controller = createVoiceController({ windowRef: win, clock: () => now });
 
     expect(controller.speak('Good rep.', { enabled: true })).toBe(true);
@@ -51,7 +51,9 @@ describe('voice coach', () => {
     expect(callArgs.rate).toBe(0.98);
 
     now += 6000;
+    const utterance = win.speechSynthesis.speak.mock.calls[0][0];
     win.speechSynthesis.speaking = false;
+    if (utterance.onend) utterance.onend();
     expect(controller.speak('Move back.', { enabled: true })).toBe(true);
     expect(win.speechSynthesis.speak).toHaveBeenCalledTimes(2);
   });
@@ -74,14 +76,22 @@ describe('voice coach', () => {
     expect(controller.speak('Ready.', { enabled: true })).toBe(true);
     expect(controller.speak('Ready.', { enabled: true })).toBe(false);
     
-    // Within throttle, different message, but speak() is occupied so it drops unless isRepCount
+    // Within throttle, different message, but speak() is occupied so it queues
     now += 1000;
     win.speechSynthesis.speaking = true;
-    expect(controller.speak('Move back.', { enabled: true })).toBe(false);
+    expect(controller.speak('Move back.', { enabled: true })).toBe(true);
     
-    // Rep counts can interrupt
+    // Rep counts are queued, not interrupting
     expect(controller.speakRep(3, true)).toBe(true);
-    expect(win.speechSynthesis.cancel).toHaveBeenCalled();
+    expect(win.speechSynthesis.cancel).not.toHaveBeenCalled();
+    // It's queued, so speak isn't called yet
+    expect(win.speechSynthesis.speak).toHaveBeenCalledTimes(1);
+
+    // Simulate end of speech to trigger queue
+    win.speechSynthesis.speaking = false;
+    const utt = win.speechSynthesis.speak.mock.calls[0][0];
+    if (utt.onend) utt.onend();
+    
     expect(win.speechSynthesis.speak).toHaveBeenCalledTimes(2);
     expect(win.speechSynthesis.speak.mock.calls[1][0].text).toBe('Three.');
   });
@@ -118,5 +128,34 @@ describe('voice coach', () => {
     controller.directTestSpeak('Voice test successful.');
     expect(win.speechSynthesis.speak).toHaveBeenCalledOnce();
     expect(win.speechSynthesis.speak.mock.calls[0][0].text).toBe('Voice test successful.');
+  });
+
+  it('regression: rep event MUST NOT cancel TEST VOICE', () => {
+    let now = 1000;
+    const win = fakeWindow();
+    const controller = createVoiceController({ windowRef: win, clock: () => now });
+
+    controller.directTestSpeak('Voice test successful.');
+    expect(win.speechSynthesis.cancel).toHaveBeenCalledTimes(0);
+    expect(win.speechSynthesis.speak).toHaveBeenCalledTimes(1);
+
+    const testUtterance = win.speechSynthesis.speak.mock.calls[0][0];
+    win.speechSynthesis.pending = true;
+
+    controller.speakRep(1, true);
+
+    expect(win.speechSynthesis.cancel).toHaveBeenCalledTimes(0);
+    expect(win.speechSynthesis.speak).toHaveBeenCalledTimes(1);
+
+    win.speechSynthesis.pending = false;
+    win.speechSynthesis.speaking = false;
+    if (testUtterance.onstart) testUtterance.onstart();
+    if (testUtterance.onend) testUtterance.onend();
+
+    expect(win.speechSynthesis.speak).toHaveBeenCalledTimes(2);
+    const repUtterance = win.speechSynthesis.speak.mock.calls[1][0];
+    expect(repUtterance.text).toBe('One.');
+    if (repUtterance.onstart) repUtterance.onstart();
+    if (repUtterance.onend) repUtterance.onend();
   });
 });

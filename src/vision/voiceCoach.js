@@ -14,16 +14,9 @@ export function savedVoicePreference(windowRef = globalThis.window) {
 
 function selectVoice(voices = []) {
   // Use default voice first by trying to find one, but fallback gracefully
-  const english = voices.filter(v => v.lang.startsWith('en'));
-  if (english.length === 0) return null;
-  // If possible prefer en-IN, then en-GB, then en-US, but don't force 'Rishi'
-  return english.sort((a, b) => {
-    if (a.default) return -1;
-    if (b.default) return 1;
-    if (a.lang.startsWith('en-IN') && !b.lang.startsWith('en-IN')) return -1;
-    if (b.lang.startsWith('en-IN') && !a.lang.startsWith('en-IN')) return 1;
-    return 0;
-  })[0];
+  const sysDefault = voices.find(v => v.default);
+  if (sysDefault) return sysDefault;
+  return null;
 }
 
 export function createVoiceController({
@@ -39,6 +32,8 @@ export function createVoiceController({
   let lastSpokenCue = '';
   let lastSpokenAt = -Infinity;
   let activeUtterance = null;
+  let nextUtteranceMessage = null;
+  let nextUtteranceIsRep = false;
   
   let debugData = {
     supported: supported(),
@@ -73,9 +68,12 @@ export function createVoiceController({
     if (voice) {
       debugData.selectedVoiceName = voice.name;
       debugData.selectedVoiceLang = voice.lang;
+    } else {
+      debugData.selectedVoiceName = 'System default';
+      debugData.selectedVoiceLang = 'System default';
     }
     debugData.voicesLoaded = voices.length;
-    onTelemetry({ ...debugData });
+    onTelemetry({ ...debugData, queuedText: nextUtteranceMessage || 'None' });
   }
 
   function refreshVoices() {
@@ -111,6 +109,8 @@ export function createVoiceController({
     debugData.lastCancelReason = reason;
     debugData.lastCancelSource = source;
     activeUtterance = null;
+    nextUtteranceMessage = null;
+    nextUtteranceIsRep = false;
     
     try {
       speech().cancel();
@@ -120,16 +120,20 @@ export function createVoiceController({
     }
   }
 
-  function doSpeak(message, isRepCount = false) {
-    if (disposed || !supported() || !message) return false;
+  function processQueue() {
+    if (activeUtterance) return;
+    if (!nextUtteranceMessage) return;
     
+    const message = nextUtteranceMessage;
+    const isRep = nextUtteranceIsRep;
+    nextUtteranceMessage = null;
+    nextUtteranceIsRep = false;
+    
+    startSpeech(message, isRep);
+  }
+
+  function startSpeech(message, isRepCount = false) {
     try {
-      if (speech().speaking && !isRepCount) {
-        // Do not interrupt currently speaking cue unless it's a rep count
-        // "Avoid elaborate global cancellation behavior"
-        return false;
-      }
-      
       const utterance = new windowRef.SpeechSynthesisUtterance(message);
       const voice = selectVoice(voices);
       if (voice) {
@@ -143,26 +147,27 @@ export function createVoiceController({
         debugData.lastStartAt = clock();
         emitTelemetry();
       };
+      
+      const onComplete = () => {
+        activeUtterance = null;
+        emitTelemetry();
+        processQueue();
+      };
+      
       utterance.onend = () => {
         debugData.lastEndText = message;
         debugData.lastEndAt = clock();
-        activeUtterance = null;
-        emitTelemetry();
+        onComplete();
       };
+      
       utterance.onerror = (e) => {
         debugData.lastErrorText = `Error [${e.error}]: ${message}`;
         debugData.lastErrorAt = clock();
-        activeUtterance = null;
-        emitTelemetry();
+        onComplete();
       };
 
       activeUtterance = utterance;
       debugData.lastRequested = message;
-      
-      if (isRepCount) {
-        // High priority: we can cancel existing speech to speak the rep count immediately
-        cancel('rep priority', 'rep-count');
-      }
       
       speech().speak(utterance);
       emitTelemetry();
@@ -173,6 +178,22 @@ export function createVoiceController({
       emitTelemetry();
       return false;
     }
+  }
+
+  function doSpeak(message, isRepCount = false) {
+    if (disposed || !supported() || !message) return false;
+    
+    if (activeUtterance || speech().speaking || speech().pending) {
+      if (nextUtteranceMessage === message) {
+        return false; // Drop duplicate
+      }
+      nextUtteranceMessage = message;
+      nextUtteranceIsRep = isRepCount;
+      emitTelemetry();
+      return true;
+    }
+    
+    return startSpeech(message, isRepCount);
   }
 
   function speak(message, { enabled = true, force = false, isRepCount = false } = {}) {
