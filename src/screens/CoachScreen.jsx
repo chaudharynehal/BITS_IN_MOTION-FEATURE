@@ -120,6 +120,8 @@ export default function CoachScreen({
     }
   }, [speakCue]);
 
+  const previousExerciseIdRef = useRef(exerciseId);
+
   useEffect(() => {
     stopSessionCamera();
     sessionStartedAtRef.current = null;
@@ -133,7 +135,13 @@ export default function CoachScreen({
     lastMeasurementRef.current = null;
     lastSpokenRepRef.current = 0;
     voiceControllerRef.current?.resetThrottle();
-    voiceControllerRef.current?.cancel('exercise-change', 'exercise-effect');
+
+    // Only cancel if this is a genuine exercise change, not just a mount/remount
+    if (previousExerciseIdRef.current !== exerciseId) {
+      voiceControllerRef.current?.cancel('exercise-change', 'exercise-effect', ['COACHING', 'REP_COUNT', 'SETUP', 'FORM']);
+    }
+    previousExerciseIdRef.current = exerciseId;
+
     feedbackRef.current = INITIAL_FEEDBACK;
     lastUiStateRef.current = { at: 0, reps: 0, stage: 'Finding start', measurementValue: null, measurementUnit: exerciseId === 'jumping-jacks' ? '×' : '°' };
     setReps(0);

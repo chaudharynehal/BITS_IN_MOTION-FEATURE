@@ -199,5 +199,38 @@ describe('voice coach', () => {
       expect(interrupted).toBe(false);
       expect(controller.snapshot().activeGeneration).toBe(onGen);
     });
+
+    it('exercise-change cleanup protects TEST_VOICE if explicitly running', () => {
+      let now = 1000;
+      let lastTelemetry = {};
+      const win = fakeWindow();
+      const controller = createVoiceController({
+        windowRef: win,
+        clock: () => now,
+        onTelemetry: (t) => { lastTelemetry = t; },
+      });
+
+      // 1. Click TEST VOICE
+      controller.directTestSpeak('Voice test successful.');
+      expect(controller.snapshot().activePriority).toBe(SPEECH_PRIORITY.TEST);
+      expect(controller.snapshot().activeType).toBe('TEST_VOICE');
+
+      // 2. Exercise object/state rerenders, semantic exercise ID remains 'squats'
+      // CoachScreen cleanup would attempt to cancel COACHING/REP_COUNT
+      controller.cancel('exercise-change', 'exercise-effect', ['COACHING', 'REP_COUNT', 'SETUP', 'FORM']);
+
+      // Expected: TEST VOICE is NOT cancelled
+      expect(controller.snapshot().activeGeneration).toBeGreaterThan(0);
+      expect(win.speechSynthesis.cancel).not.toHaveBeenCalled();
+
+      // If there was a COACHING utterance running instead, it WOULD be cancelled
+      // Wait, let's force kill first just for test cleanliness
+      controller.cancel('explicit', 'test-teardown');
+      
+      controller.speak('Go lower.', { enabled: true, force: true, priority: SPEECH_PRIORITY.FORM });
+      expect(controller.snapshot().activePriority).toBe(SPEECH_PRIORITY.FORM);
+      controller.cancel('exercise-change', 'exercise-effect', ['COACHING', 'REP_COUNT', 'SETUP', 'FORM']);
+      expect(win.speechSynthesis.cancel).toHaveBeenCalledTimes(2); // once for teardown, once for coaching
+    });
   });
 });

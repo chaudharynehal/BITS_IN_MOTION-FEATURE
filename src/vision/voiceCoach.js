@@ -103,6 +103,7 @@ export function createVoiceController({
   let utteranceGeneration = 0;  // monotonically increasing ownership token
   let activeGeneration = 0;     // generation of the currently speaking utterance
   let activePriority = 0;       // priority of the currently speaking utterance
+  let activeType = null;        // type of the currently speaking utterance
 
   let debugData = {
     supported: supported(),
@@ -121,6 +122,7 @@ export function createVoiceController({
     lastErrorAt: 0,
     lastCancelReason: '',
     lastCancelSource: '',
+    lastCancelType: null,
     lastCancelAt: 0,
     utteranceId: 0,
   };
@@ -193,14 +195,23 @@ export function createVoiceController({
    * Cancel current speech with a tracked reason and source.
    * @param {string} reason - why the cancellation happened
    * @param {string} source - which code path triggered it
+   * @param {Array<string>|null} restrictToTypes - if provided, only cancel if activeType is in this list
    */
-  function cancel(reason = 'explicit', source = 'unknown') {
+  function cancel(reason = 'explicit', source = 'unknown', restrictToTypes = null) {
     if (!supported()) return;
+    
+    if (restrictToTypes) {
+      const allowed = Array.isArray(restrictToTypes) ? restrictToTypes.includes(activeType) : restrictToTypes === activeType;
+      if (!allowed) return; // do not cancel if activeType doesn't match, protects other utterances
+    }
+
     debugData.lastCancelReason = reason;
     debugData.lastCancelSource = source;
+    debugData.lastCancelType = activeType;
     debugData.lastCancelAt = clock();
     activeGeneration = 0;
     activePriority = 0;
+    activeType = null;
     try {
       speech().cancel();
       emitTelemetry();
@@ -213,7 +224,7 @@ export function createVoiceController({
    * Internal: create and speak an utterance with ownership tracking.
    * @returns {number} the generation token of the utterance
    */
-  function _doSpeak(message, priority, voiceMode = 'coach') {
+  function _doSpeak(message, priority, voiceMode = 'coach', type = 'COACHING') {
     const gen = ++utteranceGeneration;
     try {
       if (activePriority > priority) {
@@ -251,6 +262,7 @@ export function createVoiceController({
           debugData.lastEndAt = clock();
           activeGeneration = 0;
           activePriority = 0;
+          activeType = null;
           emitTelemetry();
         }
       };
@@ -260,12 +272,14 @@ export function createVoiceController({
         if (activeGeneration === gen) {
           activeGeneration = 0;
           activePriority = 0;
+          activeType = null;
         }
         emitTelemetry();
       };
 
       activeGeneration = gen;
       activePriority = priority;
+      activeType = type;
       debugData.lastRequested = message;
       speech().speak(utterance);
       emitTelemetry();
@@ -286,7 +300,7 @@ export function createVoiceController({
    */
   function directTestSpeak(message, voiceMode = 'coach') {
     if (disposed || !supported() || !message) return false;
-    const gen = _doSpeak(message, SPEECH_PRIORITY.TEST, voiceMode);
+    const gen = _doSpeak(message, SPEECH_PRIORITY.TEST, voiceMode, 'TEST_VOICE');
     return gen > 0;
   }
 
@@ -294,9 +308,12 @@ export function createVoiceController({
    * Speak a coaching cue. Respects throttling and priority.
    * Will NOT cancel a higher-priority utterance (e.g., TEST VOICE).
    */
-  function speak(message, { enabled = true, force = false, priority = SPEECH_PRIORITY.FORM } = {}) {
+  function speak(message, { enabled = true, force = false, priority = SPEECH_PRIORITY.FORM, type = 'COACHING' } = {}) {
     if (disposed || !enabled || !supported() || !message) return false;
     const now = clock();
+
+    // Infer type if it's a rep count
+    if (priority === SPEECH_PRIORITY.REP_COUNT) type = 'REP_COUNT';
 
     // Never cancel a higher-priority utterance
     if (activePriority > priority && activeGeneration > 0) return false;
@@ -307,7 +324,7 @@ export function createVoiceController({
     lastSpokenAt = now;
     lastPriority = priority;
 
-    return _doSpeak(message, priority) > 0;
+    return _doSpeak(message, priority, 'coach', type) > 0;
   }
 
   function resetThrottle() {
@@ -326,7 +343,7 @@ export function createVoiceController({
   attachVoicesChanged();
 
   return {
-    cancel: (reason, source) => cancel(reason || 'explicit', source || 'external'),
+    cancel: (reason, source, restrictToTypes) => cancel(reason || 'explicit', source || 'external', restrictToTypes),
     dispose,
     refreshVoices,
     resetThrottle,
@@ -334,6 +351,6 @@ export function createVoiceController({
     speak,
     directTestSpeak,
     supported,
-    snapshot: () => ({ lastSpokenCue, lastSpokenAt, voiceCount: cachedVoices().length, disposed, activeGeneration, activePriority }),
+    snapshot: () => ({ lastSpokenCue, lastSpokenAt, voiceCount: cachedVoices().length, disposed, activeGeneration, activePriority, activeType }),
   };
 }
