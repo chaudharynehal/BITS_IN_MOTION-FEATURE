@@ -30,6 +30,35 @@ function minimumVisibility(landmarks, indexes) {
   return Math.min(...points.map(landmarkConfidence));
 }
 
+const CORE_VISIBILITY_JOINTS = {
+  leftShoulder: 11, rightShoulder: 12, leftElbow: 13, rightElbow: 14,
+  leftWrist: 15, rightWrist: 16, leftHip: 23, rightHip: 24,
+  leftKnee: 25, rightKnee: 26, leftAnkle: 27, rightAnkle: 28,
+};
+const PERSON_MIN_CONFIDENCE = 0.3;
+
+// PERSON DETECTED is deliberately lenient: MediaPipe returned a credible human
+// pose with enough core torso landmarks. It is separate from EXERCISE READY,
+// which requires the specific joints for the selected movement. A weak ankle or
+// wrist must never demote a genuinely-present person to "no person".
+export function personDetection(landmarks) {
+  const coreVisibility = {};
+  for (const [name, index] of Object.entries(CORE_VISIBILITY_JOINTS)) {
+    coreVisibility[name] = landmarkConfidence(landmarks?.[index]);
+  }
+  const shoulderVisibility = Math.max(coreVisibility.leftShoulder, coreVisibility.rightShoulder);
+  const hipVisibility = Math.max(coreVisibility.leftHip, coreVisibility.rightHip);
+  const torsoPoints = [
+    coreVisibility.leftShoulder, coreVisibility.rightShoulder,
+    coreVisibility.leftHip, coreVisibility.rightHip,
+  ].filter((value) => value >= PERSON_MIN_CONFIDENCE).length;
+  const personDetected = Boolean(Array.isArray(landmarks) && landmarks.length >= 25
+    && shoulderVisibility >= PERSON_MIN_CONFIDENCE
+    && hipVisibility >= PERSON_MIN_CONFIDENCE
+    && torsoPoints >= 2);
+  return { personDetected, coreVisibility, shoulderVisibility, hipVisibility };
+}
+
 function bestSide(landmarks, keys, preferredSide = null, preferenceThreshold = 0.45) {
   const scores = Object.entries(SIDE_INDEXES).map(([side, indexes]) => ({
     side,
@@ -90,14 +119,19 @@ function framingForPoints(points, {
 
 export function measureSquat(input, minVisibility = 0.6, preferredSide = null) {
   const { landmarks, frameBrightness } = poseInput(input);
+  const person = personDetection(landmarks);
   const measurement = getBestKneeMeasurement(landmarks, minVisibility, preferredSide);
   const indexes = measurement.side ? SIDE_INDEXES[measurement.side] : SIDE_INDEXES.left;
   const framingReason = framingForPoints(
     [landmarks?.[indexes.shoulder], landmarks?.[indexes.hip], landmarks?.[indexes.knee], landmarks?.[indexes.ankle]],
     { frameBrightness, requiredReason: 'full-body' },
   );
+  const valid = measurement.valid && framingReason === 'ready';
   return {
-    valid: measurement.valid && framingReason === 'ready',
+    valid,
+    exerciseReady: valid,
+    personDetected: person.personDetected,
+    coreVisibility: person.coreVisibility,
     visibility: measurement.visibility,
     side: measurement.side,
     primaryValue: measurement.angle,
@@ -109,6 +143,7 @@ export function measureSquat(input, minVisibility = 0.6, preferredSide = null) {
 
 export function measurePushup(input, minVisibility = 0.55, preferredSide = null, preferenceThreshold = 0.45) {
   const { landmarks, frameBrightness } = poseInput(input);
+  const person = personDetection(landmarks);
   // Do not require ankle visibility for pushups
   const side = bestSide(landmarks, ['shoulder', 'elbow', 'hip', 'wrist'], preferredSide, preferenceThreshold);
   const points = side.indexes;
@@ -122,8 +157,12 @@ export function measurePushup(input, minVisibility = 0.55, preferredSide = null,
     [landmarks?.[points.shoulder], landmarks?.[points.elbow], landmarks?.[points.hip]],
     { floor: true, frameBrightness, requiredReason: 'key-joints', minSpan: 0.20 },
   );
+  const valid = side.visibility >= minVisibility && elbowAngle !== null && framingReason === 'ready' && (bodyAngle === null || bodyAngle >= 140);
   return {
-    valid: side.visibility >= minVisibility && elbowAngle !== null && framingReason === 'ready' && (bodyAngle === null || bodyAngle >= 140),
+    valid,
+    exerciseReady: valid,
+    personDetected: person.personDetected,
+    coreVisibility: person.coreVisibility,
     visibility: side.visibility,
     side: side.side,
     primaryValue: elbowAngle,
@@ -136,6 +175,7 @@ export function measurePushup(input, minVisibility = 0.55, preferredSide = null,
 
 export function measureCrunch(input, minVisibility = 0.55, preferredSide = null, preferenceThreshold = 0.45) {
   const { landmarks, worldLandmarks, frameBrightness } = poseInput(input);
+  const person = personDetection(landmarks);
   const side = bestSide(landmarks, ['shoulder', 'hip', 'knee'], preferredSide, preferenceThreshold);
   const points = side.indexes;
   const shoulder = landmarks?.[points.shoulder];
@@ -155,8 +195,12 @@ export function measureCrunch(input, minVisibility = 0.55, preferredSide = null,
     [shoulder, hip, knee],
     { floor: true, frameBrightness, requiredReason: 'key-joints', minSpan: 0.18 },
   );
+  const valid = side.visibility >= minVisibility && torsoAngle !== null && hipKneeDistance > 0.035 && framingReason === 'ready';
   return {
-    valid: side.visibility >= minVisibility && torsoAngle !== null && hipKneeDistance > 0.035 && framingReason === 'ready',
+    valid,
+    exerciseReady: valid,
+    personDetected: person.personDetected,
+    coreVisibility: person.coreVisibility,
     visibility: side.visibility,
     side: side.side,
     primaryValue: torsoAngle,
@@ -174,6 +218,7 @@ export function measureCrunch(input, minVisibility = 0.55, preferredSide = null,
 
 export function measureJumpingJack(input, minVisibility = 0.55) {
   const { landmarks, frameBrightness } = poseInput(input);
+  const person = personDetection(landmarks);
   const required = [11, 12, 15, 16, 23, 24, 27, 28];
   const visibility = minimumVisibility(landmarks, required);
   const shoulderWidth = distance(landmarks?.[11], landmarks?.[12]);
@@ -188,8 +233,12 @@ export function measureJumpingJack(input, minVisibility = 0.55) {
     requiredReason: 'full-body',
     overheadRoom: true,
   });
+  const valid = visibility >= minVisibility && shoulderWidth > 0.02 && framingReason === 'ready';
   return {
-    valid: visibility >= minVisibility && shoulderWidth > 0.02 && framingReason === 'ready',
+    valid,
+    exerciseReady: valid,
+    personDetected: person.personDetected,
+    coreVisibility: person.coreVisibility,
     visibility,
     primaryValue: Math.round(feetRatio * 100) / 100,
     feetRatio,

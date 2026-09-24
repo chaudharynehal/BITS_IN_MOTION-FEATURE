@@ -4,7 +4,7 @@ import { getCameraErrorState, isCameraSupported, startCamera, stopCamera } from 
 import { clearPoseOverlay, drawPoseOverlay } from '../vision/poseLandmarker';
 import { createPoseProvider } from '../vision/poseProvider';
 import { createExerciseDetector, DETECTOR_CONFIGS } from '../vision/exerciseDetectors';
-import { createSubjectTracker } from '../vision/subjectContinuity';
+import { selectPrimaryPose } from '../vision/poseSubject';
 import { createVideoBrightnessSampler } from '../vision/frameReadiness';
 import { VOICE_STORAGE_KEY, createVoiceController, savedVoicePreference } from '../vision/voiceCoach';
 
@@ -36,7 +36,6 @@ export default function CoachScreen({
   const trackEndCleanupRef = useRef(null);
   const lastVideoTimeRef = useRef(-1);
   const detectorRef = useRef(createExerciseDetector(exerciseId));
-  const subjectTrackerRef = useRef(createSubjectTracker());
   const brightnessSamplerRef = useRef(createVideoBrightnessSampler());
   const voiceControllerRef = useRef(null);
   const feedbackRef = useRef(INITIAL_FEEDBACK);
@@ -130,7 +129,6 @@ export default function CoachScreen({
     framingInterruptionsRef.current = 0;
     missingPoseRef.current = false;
     detectorRef.current = createExerciseDetector(exerciseId);
-    subjectTrackerRef.current.reset();
     brightnessSamplerRef.current.reset();
     cueCountsRef.current = {};
     lastCueKeyRef.current = null;
@@ -224,12 +222,12 @@ export default function CoachScreen({
           return;
         }
 
-        const trackedPose = subjectTrackerRef.current.update(result.landmarks || [], result.worldLandmarks || []);
-        const landmarks = trackedPose?.landmarks;
+        const primary = selectPrimaryPose(result.landmarks || [], result.worldLandmarks || []);
+        const landmarks = primary?.landmarks;
         drawPoseOverlay(canvas, landmarks);
         const state = detectorRef.current.update({
           landmarks,
-          worldLandmarks: trackedPose?.worldLandmarks,
+          worldLandmarks: primary?.worldLandmarks,
           frameBrightness: brightness,
         }, now);
         const measurement = state.rawMeasurement;
@@ -241,11 +239,21 @@ export default function CoachScreen({
           const avgLatency = lastLatenciesRef.current.reduce((a, b) => a + b.latency, 0) / lastLatenciesRef.current.length;
           const oldest = lastLatenciesRef.current[0].time;
           const fps = lastLatenciesRef.current.length > 1 ? (lastLatenciesRef.current.length - 1) * 1000 / Math.max(1, now - oldest) : 0;
+          const mediapipeReturned = (result.landmarks?.length || 0) > 0;
           setDiagnosticData((prev) => {
             const updates = {
               fps: Math.round(fps),
               latency: Math.round(avgLatency),
+              mediapipeReturned,
+              landmarkCount: landmarks ? landmarks.length : 0,
               poseDetected: !!landmarks,
+              personDetected: Boolean(state.personDetected),
+              exerciseReady: Boolean(state.exerciseReady),
+              coreVisibility: measurement.coreVisibility || {},
+              personFailReason: !mediapipeReturned
+                ? 'no-mediapipe-pose'
+                : (!state.personDetected ? 'core-landmarks-weak' : ''),
+              exerciseFailReason: state.exerciseReady ? '' : (measurement.framingReason || 'not-ready'),
               side: measurement.side || 'N/A',
               rawAngle: state.rawMeasurement?.primaryValue,
               progressRaw: state.progressRaw,
@@ -369,7 +377,6 @@ export default function CoachScreen({
       }
       streamRef.current = stream;
       watchStreamEnd(stream);
-      subjectTrackerRef.current.reset();
       brightnessSamplerRef.current.reset();
       sessionStartedAtRef.current = Date.now();
       lastVideoTimeRef.current = -1;
@@ -413,7 +420,6 @@ export default function CoachScreen({
     lastMeasurementRef.current = null;
     lastSpokenRepRef.current = 0;
     voiceControllerRef.current?.resetThrottle();
-    voiceControllerRef.current?.cancel('user-reset', 'handleReset');
     const next = { ...INITIAL_FEEDBACK, until: performance.now() + 700 };
     feedbackRef.current = next;
     setFeedback(next);
@@ -540,7 +546,25 @@ export default function CoachScreen({
           <div><strong>DEBUG MODE</strong></div>
           <div>Backend: MediaPipe (only)</div>
           <div>FPS: {diagnosticData.fps} | Latency: {diagnosticData.latency}ms</div>
-          <div>Pose Detected: {diagnosticData.poseDetected ? 'YES' : 'NO'} | Side: {diagnosticData.side}</div>
+          <div style={{ marginTop: '5px', borderTop: '1px solid #0f0', paddingTop: '5px' }}>
+            <div><strong>POSE ACQUISITION</strong></div>
+            <div>MediaPipe returned landmarks: {diagnosticData.mediapipeReturned ? 'YES' : 'NO'} ({diagnosticData.landmarkCount || 0})</div>
+            <div>Person detected: {diagnosticData.personDetected ? 'YES' : 'NO'}{diagnosticData.personFailReason ? ` (${diagnosticData.personFailReason})` : ''}</div>
+            <div>Exercise ready: {diagnosticData.exerciseReady ? 'YES' : 'NO'}{diagnosticData.exerciseFailReason ? ` (${diagnosticData.exerciseFailReason})` : ''}</div>
+            {(() => {
+              const cv = diagnosticData.coreVisibility || {};
+              const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : '—');
+              return (
+                <div style={{ fontSize: '11px', lineHeight: 1.3 }}>
+                  <div>L/R shoulder: {fmt(cv.leftShoulder)} / {fmt(cv.rightShoulder)}</div>
+                  <div>L/R hip: {fmt(cv.leftHip)} / {fmt(cv.rightHip)}</div>
+                  <div>L/R knee: {fmt(cv.leftKnee)} / {fmt(cv.rightKnee)}</div>
+                  <div>L/R ankle: {fmt(cv.leftAnkle)} / {fmt(cv.rightAnkle)}</div>
+                  <div>L/R wrist: {fmt(cv.leftWrist)} / {fmt(cv.rightWrist)}</div>
+                </div>
+              );
+            })()}
+          </div>
           <div>Exercise: {exerciseId} | Phase: {stage}</div>
           <div>Progress Raw: {typeof diagnosticData.progressRaw === 'number' ? diagnosticData.progressRaw.toFixed(2) : 'N/A'} | Smoothed: {typeof diagnosticData.progressSmoothed === 'number' ? diagnosticData.progressSmoothed.toFixed(2) : 'N/A'}</div>
           <div>Active armed: {diagnosticData.activeArmed ? 'YES' : 'NO'} | Max Progress: {typeof diagnosticData.maxProgress === 'number' ? diagnosticData.maxProgress.toFixed(2) : 'N/A'}</div>

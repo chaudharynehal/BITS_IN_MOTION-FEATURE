@@ -58,12 +58,18 @@ function feedbackFor(exerciseId, measurement, state) {
     return { key: 'body-line', message: 'Bring your hips into a straighter line', tone: 'warning', priority: 6, holdMs: 850 };
   }
   if (!measurement.valid || (measurement.framingReason && measurement.framingReason !== 'ready')) {
+    // PERSON vs EXERCISE READY: only say "no person" when MediaPipe genuinely
+    // has no credible human pose. A present person with legs out of frame or a
+    // weak joint gets a framing cue, never "no person".
+    if (!measurement.personDetected) {
+      return { key: 'no-person', message: 'Step into frame so we can see you', tone: 'warning', priority: 6, holdMs: 1300 };
+    }
     const framing = {
-      'no-person': ['no-person', 'No person detected — step into view'],
+      'no-person': ['full-body', 'Step back so your full body is visible'],
       'move-farther': ['move-farther', 'Move farther away — keep your whole body in frame'],
       'move-closer': ['move-closer', 'Move a little closer so your joints are clear'],
-      'full-body': ['full-body', 'Full body not visible — adjust distance or camera tilt'],
-      'key-joints': ['key-joints', exerciseId === 'crunches' ? 'Keep your shoulder, hip and knee visible' : 'Keep the key joints visible'],
+      'full-body': ['full-body', exerciseId === 'squats' ? 'Step back so your knees and ankles are visible' : 'Full body not visible — adjust distance or camera tilt'],
+      'key-joints': ['key-joints', exerciseId === 'crunches' ? 'Keep your shoulder, hip and knee visible' : 'Adjust your position so the key joints are visible'],
       'adjust-angle': ['adjust-angle', exerciseId === 'crunches' ? 'Set the camera low and side-on to your shoulders and hips' : 'Turn side-on and lower the camera angle'],
       'improve-lighting': ['improve-lighting', 'Improve lighting so the camera can see your joints'],
       'overhead-room': ['overhead-room', 'Move farther back or tilt up to keep overhead room'],
@@ -152,6 +158,8 @@ export function createExerciseDetector(exerciseId = 'squats', options = {}) {
     return {
       ...state,
       phaseLabel: phaseLabel(id, state.phase),
+      personDetected: Boolean(rawMeasurement.personDetected),
+      exerciseReady: Boolean(rawMeasurement.valid),
       measurement: rawMeasurement,
       rawMeasurement: rawMeasurement,
       feedback: feedbackFor(id, rawMeasurement, state),
