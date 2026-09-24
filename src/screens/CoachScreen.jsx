@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Camera, Check, CheckCircle2, CircleStop, Info, LoaderCircle, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, TriangleAlert, VideoOff, Volume2, VolumeX } from 'lucide-react';
 import { getCameraErrorState, isCameraSupported, startCamera, stopCamera } from '../vision/camera';
-import { clearPoseOverlay, drawPoseOverlay, initializePoseLandmarker } from '../vision/poseLandmarker';
+import { clearPoseOverlay, drawPoseOverlay } from '../vision/poseLandmarker';
+import { createPoseProvider } from '../vision/poseProvider';
 import { createExerciseDetector, DETECTOR_CONFIGS } from '../vision/exerciseDetectors';
-import { createSubjectTracker } from '../vision/subjectContinuity';
+import { selectPrimaryPose } from '../vision/poseSubject';
 import { createVideoBrightnessSampler } from '../vision/frameReadiness';
-import { VOICE_CUES, VOICE_STORAGE_KEY, createVoiceController, repVoiceMessage, savedVoicePreference } from '../vision/voiceCoach';
+import { VOICE_STORAGE_KEY, createVoiceController, savedVoicePreference } from '../vision/voiceCoach';
 
 const INITIAL_FEEDBACK = { key: 'initial', message: 'Keep your full body visible and follow the setup guide', tone: 'neutral', priority: 0, until: 0 };
 
@@ -35,7 +36,6 @@ export default function CoachScreen({
   const trackEndCleanupRef = useRef(null);
   const lastVideoTimeRef = useRef(-1);
   const detectorRef = useRef(createExerciseDetector(exerciseId));
-  const subjectTrackerRef = useRef(createSubjectTracker());
   const brightnessSamplerRef = useRef(createVideoBrightnessSampler());
   const voiceControllerRef = useRef(null);
   const feedbackRef = useRef(INITIAL_FEEDBACK);
@@ -49,7 +49,17 @@ export default function CoachScreen({
   const cameraRequestRef = useRef(null);
   const modelRequestRef = useRef(0);
   const summaryRef = useRef(null);
+  const processingRef = useRef(false);
   const lastUiStateRef = useRef({ at: 0, reps: 0, stage: 'Finding start', measurementValue: null, measurementUnit: '°' });
+  const captureDataRef = useRef([]);
+
+  // Developer mode backend selection
+  const debugParams = new URLSearchParams(window.location.search);
+  const isDebugMode = debugParams.get('cameraDebug') === '1';
+  const poseBackend = 'mediapipe';
+  const lastLatenciesRef = useRef([]);
+  const [diagnosticData, setDiagnosticData] = useState({ fps: 0, latency: 0 });
+  const [isCapturing, setIsCapturing] = useState(false);
 
   const [modelStatus, setModelStatus] = useState('loading');
   const [modelNote, setModelNote] = useState('Loading the lightweight pose model…');
@@ -63,8 +73,11 @@ export default function CoachScreen({
   const [videoAspect, setVideoAspect] = useState(4 / 3);
   const [previewSummary, setPreviewSummary] = useState(null);
   const [voiceEnabled, setVoiceEnabled] = useState(savedVoicePreference);
+  const voiceEnabledRef = useRef(voiceEnabled);
+  useEffect(() => { voiceEnabledRef.current = voiceEnabled; }, [voiceEnabled]);
   const lastSpokenRepRef = useRef(0);
-  if (voiceControllerRef.current === null) voiceControllerRef.current = createVoiceController();
+  const [voiceTelemetry, setVoiceTelemetry] = useState({});
+  if (voiceControllerRef.current === null) voiceControllerRef.current = createVoiceController({ onTelemetry: (data) => setVoiceTelemetry(data) });
   const speechSupported = voiceControllerRef.current.supported();
 
   useEffect(() => {
@@ -72,24 +85,43 @@ export default function CoachScreen({
   }, [previewSummary]);
 
   const speakCue = useCallback((message, { force = false } = {}) => {
-    voiceControllerRef.current?.speak(message, { enabled: voiceEnabled && speechSupported, force });
-  }, [speechSupported, voiceEnabled]);
+    voiceControllerRef.current?.speak(message, { enabled: voiceEnabledRef.current && speechSupported, force });
+  }, [speechSupported]);
 
   const publishFeedback = useCallback((cue) => {
     const now = performance.now();
     const current = feedbackRef.current;
+
+    if (cue.message === current.message) {
+      if (!current.spoken && (now - current.firstSeen) > 400) {
+        current.spoken = true;
+        speakCue(cue.message, { force: false });
+      }
+      current.until = now + (cue.holdMs || 700);
+      return;
+    }
+
     if (now < current.until && cue.priority <= current.priority) return;
-    if (cue.message === current.message && now < current.until) return;
-    const next = { ...cue, until: now + (cue.holdMs || 700) };
+
+    const next = { ...cue, firstSeen: now, spoken: false, until: now + (cue.holdMs || 700) };
     feedbackRef.current = next;
+
     if (cue.key && cue.key !== lastCueKeyRef.current) {
       cueCountsRef.current[cue.key] = (cueCountsRef.current[cue.key] || 0) + 1;
       lastCueKeyRef.current = cue.key;
     }
+
     if (mountedRef.current) setFeedback(next);
 
-    if (VOICE_CUES[cue.key]) speakCue(VOICE_CUES[cue.key]);
+    // High priority readiness (6) or success (7+) cues speak faster, but let's just make success instant
+    // framing cues (priority 6) are 400ms stable.
+    if (cue.priority >= 7) {
+      next.spoken = true;
+      speakCue(cue.message, { force: true });
+    }
   }, [speakCue]);
+
+  const previousExerciseIdRef = useRef(exerciseId);
 
   useEffect(() => {
     stopSessionCamera();
@@ -97,14 +129,18 @@ export default function CoachScreen({
     framingInterruptionsRef.current = 0;
     missingPoseRef.current = false;
     detectorRef.current = createExerciseDetector(exerciseId);
-    subjectTrackerRef.current.reset();
     brightnessSamplerRef.current.reset();
     cueCountsRef.current = {};
     lastCueKeyRef.current = null;
     lastMeasurementRef.current = null;
     lastSpokenRepRef.current = 0;
     voiceControllerRef.current?.resetThrottle();
-    voiceControllerRef.current?.cancel();
+
+    // Only cancel if this is a genuine exercise change, not just a mount/remount
+    if (previousExerciseIdRef.current !== exerciseId) {
+    }
+    previousExerciseIdRef.current = exerciseId;
+
     feedbackRef.current = INITIAL_FEEDBACK;
     lastUiStateRef.current = { at: 0, reps: 0, stage: 'Finding start', measurementValue: null, measurementUnit: exerciseId === 'jumping-jacks' ? '×' : '°' };
     setReps(0);
@@ -120,16 +156,16 @@ export default function CoachScreen({
     landmarkerRef.current?.close();
     landmarkerRef.current = null;
     setModelStatus('loading');
-    setModelNote('Loading the lightweight pose model…');
+    setModelNote('Loading the MediaPipe pose model…');
     try {
-      const landmarker = await initializePoseLandmarker(() => {
+      const provider = await createPoseProvider('mediapipe', () => {
         if (mountedRef.current) setModelNote('GPU unavailable—switching to compatible CPU mode…');
       });
       if (!mountedRef.current || modelRequestRef.current !== request) {
-        landmarker.close();
+        provider.close();
         return;
       }
-      landmarkerRef.current = landmarker;
+      landmarkerRef.current = provider;
       setModelStatus('ready');
       setModelNote('Pose model ready');
     } catch (error) {
@@ -158,14 +194,18 @@ export default function CoachScreen({
     };
   }, [loadModel]);
 
-  const processFrame = useCallback(() => {
+  const processFrame = useCallback(async () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const landmarker = landmarkerRef.current;
-    if (!video || !canvas || !landmarker || !streamRef.current) return;
+    const provider = landmarkerRef.current;
+    if (!video || !canvas || !provider || !streamRef.current || processingRef.current) {
+      animationRef.current = requestAnimationFrame(processFrame);
+      return;
+    }
 
     if (video.readyState >= 2 && video.currentTime !== lastVideoTimeRef.current) {
       lastVideoTimeRef.current = video.currentTime;
+      processingRef.current = true;
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -175,20 +215,76 @@ export default function CoachScreen({
       try {
         const now = performance.now();
         const brightness = brightnessSamplerRef.current.sample(video, now);
-        const result = landmarker.detectForVideo(video, now);
-        const trackedPose = subjectTrackerRef.current.update(result.landmarks || [], result.worldLandmarks || []);
-        const landmarks = trackedPose?.landmarks;
+        const result = await provider.detect(video, now);
+
+        if (!mountedRef.current || streamRef.current !== video.srcObject) {
+          processingRef.current = false;
+          return;
+        }
+
+        const primary = selectPrimaryPose(result.landmarks || [], result.worldLandmarks || []);
+        const landmarks = primary?.landmarks;
         drawPoseOverlay(canvas, landmarks);
         const state = detectorRef.current.update({
           landmarks,
-          worldLandmarks: trackedPose?.worldLandmarks,
+          worldLandmarks: primary?.worldLandmarks,
           frameBrightness: brightness,
         }, now);
-        const measurement = state.measurement;
+        const measurement = state.rawMeasurement;
+
+        // Diagnostic Data update
+        if (isDebugMode) {
+          lastLatenciesRef.current.push({ time: now, latency: result.inferenceLatency });
+          if (lastLatenciesRef.current.length > 30) lastLatenciesRef.current.shift();
+          const avgLatency = lastLatenciesRef.current.reduce((a, b) => a + b.latency, 0) / lastLatenciesRef.current.length;
+          const oldest = lastLatenciesRef.current[0].time;
+          const fps = lastLatenciesRef.current.length > 1 ? (lastLatenciesRef.current.length - 1) * 1000 / Math.max(1, now - oldest) : 0;
+          const mediapipeReturned = (result.landmarks?.length || 0) > 0;
+          setDiagnosticData((prev) => {
+            const updates = {
+              fps: Math.round(fps),
+              latency: Math.round(avgLatency),
+              mediapipeReturned,
+              landmarkCount: landmarks ? landmarks.length : 0,
+              poseDetected: !!landmarks,
+              personDetected: Boolean(state.personDetected),
+              exerciseReady: Boolean(state.exerciseReady),
+              coreVisibility: measurement.coreVisibility || {},
+              personFailReason: !mediapipeReturned
+                ? 'no-mediapipe-pose'
+                : (!state.personDetected ? 'core-landmarks-weak' : ''),
+              exerciseFailReason: state.exerciseReady ? '' : (measurement.framingReason || 'not-ready'),
+              side: measurement.side || 'N/A',
+              rawAngle: state.rawMeasurement?.primaryValue,
+              progressRaw: state.progressRaw,
+              progressSmoothed: state.progress,
+              activeArmed: state.active,
+              maxProgress: state.maxProgress,
+            };
+            if (state.event === 'rejected') updates.lastRejection = state.rejectReason || 'NOT_READY';
+            else if (state.event) updates.lastTransition = state.event;
+            return { ...prev, ...updates };
+          });
+
+          if (isCapturing) {
+            captureDataRef.current.push({
+              timestamp: now,
+              exercise: exerciseId,
+              visibility: measurement.valid ? measurement.visibility : 0,
+              angles: measurement,
+              movementPhase: state.phaseLabel,
+              repCount: state.reps,
+              event: state.event,
+              rejectReason: state.rejectReason,
+              manualLabel: null,
+              landmarks: landmarks ? landmarks.map(l => l ? { x: l.x, y: l.y, z: l.z, v: l.visibility } : null) : null
+            });
+          }
+        }
 
         if (state.reps > lastSpokenRepRef.current) {
           lastSpokenRepRef.current = state.reps;
-          speakCue(repVoiceMessage(state.reps), { force: true });
+          voiceControllerRef.current?.speakRep(state.reps, voiceEnabledRef.current);
         }
 
         const nextUi = {
@@ -220,15 +316,18 @@ export default function CoachScreen({
           publishFeedback(state.feedback);
         }
       } catch (error) {
+        console.error(error);
         stopSessionCamera();
         setModelStatus('error');
         setModelNote('Pose tracking stopped because the model could not process the camera. Retry the model, then start a new session.');
+        processingRef.current = false;
         return;
       }
+      processingRef.current = false;
     }
 
     animationRef.current = requestAnimationFrame(processFrame);
-  }, [publishFeedback, speakCue]);
+  }, [publishFeedback, speakCue, isDebugMode, isCapturing, exerciseId]);
 
   function releaseTrackEndListeners() {
     trackEndCleanupRef.current?.();
@@ -246,7 +345,7 @@ export default function CoachScreen({
     clearPoseOverlay(canvasRef.current);
     setCameraStatus('error');
     setCameraError('The camera stopped unexpectedly. Check your camera and try again.');
-    voiceControllerRef.current?.cancel();
+    voiceControllerRef.current?.cancel('camera-track-ended', 'track-end-handler');
   }
 
   function watchStreamEnd(stream) {
@@ -278,12 +377,11 @@ export default function CoachScreen({
       }
       streamRef.current = stream;
       watchStreamEnd(stream);
-      subjectTrackerRef.current.reset();
       brightnessSamplerRef.current.reset();
       sessionStartedAtRef.current = Date.now();
       lastVideoTimeRef.current = -1;
       setCameraStatus('running');
-      speakCue(VOICE_CUES.ready, { force: true });
+      speakCue('Ready.', { force: true });
       animationRef.current = requestAnimationFrame(processFrame);
     } catch (error) {
       if (!mountedRef.current || request.signal.aborted) return;
@@ -306,7 +404,7 @@ export default function CoachScreen({
     brightnessSamplerRef.current.reset();
     clearPoseOverlay(canvasRef.current);
     setCameraStatus('idle');
-    voiceControllerRef.current?.cancel();
+    voiceControllerRef.current?.cancel('session-stop', 'stopSessionCamera');
   }
 
   function handleReset() {
@@ -322,7 +420,6 @@ export default function CoachScreen({
     lastMeasurementRef.current = null;
     lastSpokenRepRef.current = 0;
     voiceControllerRef.current?.resetThrottle();
-    voiceControllerRef.current?.cancel();
     const next = { ...INITIAL_FEEDBACK, until: performance.now() + 700 };
     feedbackRef.current = next;
     setFeedback(next);
@@ -393,8 +490,132 @@ export default function CoachScreen({
     document.querySelector('.preview-exercise-tab[aria-pressed="true"]')?.focus();
   }
 
+
+  function toggleCapture() {
+    if (isCapturing) {
+      setIsCapturing(false);
+      // Export capture
+      if (captureDataRef.current.length > 0) {
+        const blob = new Blob([captureDataRef.current.map(d => JSON.stringify(d)).join('\n')], { type: 'application/jsonl' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `pose-capture-${exerciseId}-${Date.now()}.jsonl`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      captureDataRef.current = [];
+    } else {
+      captureDataRef.current = [];
+      setIsCapturing(true);
+    }
+  }
+
+  function addManualLabel(label) {
+    if (captureDataRef.current.length > 0) {
+      captureDataRef.current[captureDataRef.current.length - 1].manualLabel = label;
+      alert(`Labeled last frame: ${label}`);
+    }
+  }
+
+  function copyDiagnostics() {
+    const data = {
+      timestamp: new Date().toISOString(),
+      exercise: exerciseId,
+      fps: diagnosticData.fps,
+      inferenceLatency: diagnosticData.latency,
+      poseDetected: diagnosticData.poseDetected,
+      side: diagnosticData.side,
+      reps,
+      stage,
+      visibleCue: feedback.message,
+      lastTransition: diagnosticData.lastTransition,
+      lastRejection: diagnosticData.lastRejection,
+      smoothedAngle: measurementValue,
+      rawAngle: diagnosticData.rawAngle,
+      speechTelemetry: voiceTelemetry,
+    };
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2)).catch(console.error);
+    alert('Diagnostics copied to clipboard');
+  }
+
   return (
     <main className={'coach-page ' + (previewMode ? 'coach-page-preview' : '')}>
+      {isDebugMode && (
+        <div className="debug-panel" style={{ background: '#000', color: '#0f0', padding: '10px', fontSize: '12px', fontFamily: 'monospace', position: 'fixed', top: 0, left: 0, zIndex: 9999 }}>
+          <div><strong>DEBUG MODE</strong></div>
+          <div>Backend: MediaPipe (only)</div>
+          <div>FPS: {diagnosticData.fps} | Latency: {diagnosticData.latency}ms</div>
+          <div style={{ marginTop: '5px', borderTop: '1px solid #0f0', paddingTop: '5px' }}>
+            <div><strong>POSE ACQUISITION</strong></div>
+            <div>MediaPipe returned landmarks: {diagnosticData.mediapipeReturned ? 'YES' : 'NO'} ({diagnosticData.landmarkCount || 0})</div>
+            <div>Person detected: {diagnosticData.personDetected ? 'YES' : 'NO'}{diagnosticData.personFailReason ? ` (${diagnosticData.personFailReason})` : ''}</div>
+            <div>Exercise ready: {diagnosticData.exerciseReady ? 'YES' : 'NO'}{diagnosticData.exerciseFailReason ? ` (${diagnosticData.exerciseFailReason})` : ''}</div>
+            {(() => {
+              const cv = diagnosticData.coreVisibility || {};
+              const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : '—');
+              return (
+                <div style={{ fontSize: '11px', lineHeight: 1.3 }}>
+                  <div>L/R shoulder: {fmt(cv.leftShoulder)} / {fmt(cv.rightShoulder)}</div>
+                  <div>L/R hip: {fmt(cv.leftHip)} / {fmt(cv.rightHip)}</div>
+                  <div>L/R knee: {fmt(cv.leftKnee)} / {fmt(cv.rightKnee)}</div>
+                  <div>L/R ankle: {fmt(cv.leftAnkle)} / {fmt(cv.rightAnkle)}</div>
+                  <div>L/R wrist: {fmt(cv.leftWrist)} / {fmt(cv.rightWrist)}</div>
+                </div>
+              );
+            })()}
+          </div>
+          <div>Exercise: {exerciseId} | Phase: {stage}</div>
+          <div>Progress Raw: {typeof diagnosticData.progressRaw === 'number' ? diagnosticData.progressRaw.toFixed(2) : 'N/A'} | Smoothed: {typeof diagnosticData.progressSmoothed === 'number' ? diagnosticData.progressSmoothed.toFixed(2) : 'N/A'}</div>
+          <div>Active armed: {diagnosticData.activeArmed ? 'YES' : 'NO'} | Max Progress: {typeof diagnosticData.maxProgress === 'number' ? diagnosticData.maxProgress.toFixed(2) : 'N/A'}</div>
+          <div>Reps: {reps}</div>
+          <div>Metric: {measurementValue}{measurementUnit} | Raw: {diagnosticData.rawAngle ? Math.round(diagnosticData.rawAngle * 10)/10 : 'N/A'}{measurementUnit}</div>
+          <div>Visible Cue: {feedback.message}</div>
+          <div>Stable Cue: {voiceControllerRef.current?.snapshot().lastSpokenCue || 'None'}</div>
+          <div>Last Transition: {diagnosticData.lastTransition || 'None'}</div>
+          {diagnosticData.lastRejection && <div style={{ color: '#f00' }}>Last Rejection: {diagnosticData.lastRejection}</div>}
+
+          <div style={{ marginTop: '5px', borderTop: '1px solid #0f0', paddingTop: '5px' }}>
+            <div><strong>VOICE DEBUG</strong></div>
+            <div>Supported: {voiceTelemetry.supported ? 'YES' : 'NO'} | Voices: {voiceTelemetry.voicesLoaded}</div>
+            <div>Voice: {voiceTelemetry.selectedVoiceName} ({voiceTelemetry.selectedVoiceLang})</div>
+            
+            <div style={{ marginTop: '5px', borderTop: '1px dashed #0f0', paddingTop: '5px' }}>
+              <div>SPEECH:</div>
+              <div>Pending: {voiceTelemetry.pending ? 'Y':'N'} | Speaking: {voiceTelemetry.speaking ? 'Y':'N'} | Paused: {voiceTelemetry.paused ? 'Y':'N'}</div>
+              <div>Last Req: {voiceTelemetry.lastRequested}</div>
+              <div>Last Start: {voiceTelemetry.lastStartText}</div>
+              <div>Last End: {voiceTelemetry.lastEndText}</div>
+              {voiceTelemetry.lastErrorText && <div style={{ color: '#f00' }}>Error: {voiceTelemetry.lastErrorText}</div>}
+              {voiceTelemetry.lastCancelReason && <div style={{ color: '#ff0' }}>Cancel: {voiceTelemetry.lastCancelReason} (src: {voiceTelemetry.lastCancelSource})</div>}
+            </div>
+
+            <div style={{ marginTop: '5px', borderTop: '1px dashed #0f0', paddingTop: '5px' }}>
+              <div>QUEUE:</div>
+              <div>Queued Text: {voiceTelemetry.queuedText || 'None'}</div>
+            </div>
+            
+            <button onClick={() => voiceControllerRef.current?.directTestSpeak('Voice test successful.')} style={{ background: '#333', color: '#0f0', border: '1px solid #0f0', marginTop: '5px', padding: '2px 5px' }}>TEST VOICE</button>
+          </div>
+
+          <button onClick={copyDiagnostics} style={{ background: '#333', color: '#0f0', border: '1px solid #0f0', marginTop: '5px', padding: '2px 5px' }}>Copy Diagnostics</button>
+
+          <div style={{ marginTop: '10px', borderTop: '1px solid #0f0', paddingTop: '5px' }}>
+            <button onClick={toggleCapture} style={{ background: isCapturing ? '#f00' : '#333', color: '#fff', border: '1px solid #0f0', padding: '2px 5px' }}>
+              {isCapturing ? 'Stop & Export JSONL' : 'Start Capture'}
+            </button>
+            {isCapturing && (
+              <div style={{ marginTop: '5px', display: 'flex', gap: '5px' }}>
+                <button onClick={() => addManualLabel('VALID_REP')} style={{ background: '#333', color: '#0f0' }}>VALID_REP</button>
+                <button onClick={() => addManualLabel('PARTIAL_REP')} style={{ background: '#333', color: '#0f0' }}>PARTIAL_REP</button>
+                <button onClick={() => addManualLabel('BAD_FORM')} style={{ background: '#333', color: '#0f0' }}>BAD_FORM</button>
+                <button onClick={() => addManualLabel('NOISE')} style={{ background: '#333', color: '#0f0' }}>NOISE</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {previewMode && (
         <div className="preview-mode-banner" role="status">
           <span className="preview-mode-pill"><ShieldAlert size={14} /> Preview Mode</span>
@@ -421,7 +642,9 @@ export default function CoachScreen({
               setVoiceEnabled(next);
               try { window.localStorage.setItem(VOICE_STORAGE_KEY, String(next)); } catch {}
               if (!next && speechSupported) {
-                voiceControllerRef.current?.cancel();
+                voiceControllerRef.current?.cancel('voice-off', 'toggle-button');
+              } else if (next && speechSupported) {
+                voiceControllerRef.current?.directTestSpeak('Voice coach on.');
               }
             }}
             type="button"

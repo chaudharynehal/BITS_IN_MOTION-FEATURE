@@ -162,3 +162,44 @@
 ## Safe continuation point
 
 The cohesive homepage release is live and verified. Product logic, recommendation engine, equipment, location, and catalogue parity have been audited, simplified, fortified, and tested on `agent/gemini-product-logic-v2` (886/886 tests passing, 0 failures). Ready for integration review.
+
+
+## Camera Intelligence V4 (MediaPipe-only Production Hardening Pass)
+
+- **Branch:** `feature/camera-intelligence-v4`
+- **Status:** Local implementation complete, refactored per Emergent protocol, verified, and pushed. NOT MERGED, NOT DEPLOYED per instructions.
+- **Ownership:** Camera pipeline, MediaPipe backend, single progress contract, voice coaching single source of truth.
+- **MoveNet Removal:** MoveNet provider, TensorFlow backend, and dependencies remain completely removed. MediaPipe is the single production pose provider.
+- **Single Progress Contract:** All exercises now convert raw body geometry directly into a normalized `progress` metric (0..1) instead of using intermediate rigid phase gates.
+- **Side Locking:** Side is strictly locked during an active rep. Side selection only switches if not in an active rep, or if the current side is unusable for a sustained 1.2s.
+- **Exercise-Specific Readiness:** Targeted upper/lower body framing rules (e.g., Push-ups no longer require ankle visibility, only upper body and hips).
+- **Hysteresis & Light Smoothing:** Replaced old custom state machines with a unified EMA smoothing (alpha ~0.35) and hysteresis system. progress > ~0.70 activates the rep; progress < ~0.35 counts the rep. Fast peaks (wrist movement, crunch peaks) are preserved.
+- **Crunch Calibration:** Crunch now computes progress based on relative torso angle reduction from an individual baseline, completely eliminating complex required states (EXTENDED -> CURLING -> CURLED -> RETURNING -> EXTENDED).
+- **Push-up Calibration:** Uses user's personal top baseline.
+- **Jumping Jack Calibration:** Normalized stance width and arm height now use a personal closed stance baseline.
+- **Voice Control Simplification:** Completely removed complex prioritization levels. The voice controller now strictly mirrors the canonical visible text cue (SINGLE SOURCE OF TRUTH). Exact live-cue matching is used. Rep count takes priority. Repeating cues are safely throttled, and explicit cancel calls are eliminated unless necessary (e.g., track ended, toggled off). Both positive and corrective feedback are spoken.
+- **Verification:**
+  - `npm test`: 18 suites, 953 passed, 0 failed.
+  - `npm run build`: PASS.
+  - `node scripts/verify-camera-coach.mjs`: PASS.
+  - `node scripts/verify-browser.mjs`: PASS.
+- **Next Steps:**
+  - Physical real-world validation of the fixed constraints for Push-ups, Crunches, Squats, and Jumping Jacks.
+
+## Camera Intelligence V4 (Legacy Debug Pass)
+
+- **Branch:** `feature/camera-intelligence-v4`
+- **Ownership:** Camera pipeline, MoveNet backend, diagnostic logging, exercise readiness gating, rep logic.
+- **Changes made:**
+  - **MoveNet Fixes**: Fixed `SINGLEPOSE_THUNDER` model type bug that prevented MoveNet from loading. Added detailed developer state updates (`LOADING_TF`, `LOADING_MODEL`, `WAITING_FOR_VIDEO`, `INFERENCE_ACTIVE`).
+  - **Voice Fixes**: Exposed exact speech API telemetry to debug UI (supported, loaded, pending, paused, speaking, last event). Created a direct `TEST VOICE` button bypassing React effects for platform validation.
+  - **Readiness Hysteresis (Acquisition vs Active)**: Modified `exerciseMeasurements.js` and `angle.js` to stabilize selected side dynamically if it remains above a preference threshold, preventing angle jumps from side swapping.
+  - **Crunch Rep Fix**: Changed `crunchStateMachine.js` baseline logic to not strictly require an arbitrary extended angle (e.g., 138°), instead establishing baseline from stable posture (>=115°). 
+  - **Push-up Rep Fix**: Relaxed `cycleStateMachine.js` to accept faster push-up transitions (200ms vs 350ms) to prevent dropped counts on rapid real-world reps.
+  - **Diagnostics UI**: Enhanced `CoachScreen.jsx` to log and copy bounded transition history (`lastTransition`, `lastRejection`), exact `rawAngle` vs `smoothedAngle` diagnostics, and exact `movenetStatus`.
+- **Verification:**
+  - `npm test`: **19 suites, 965 passed, 0 failed**.
+  - `npm run build`: PASS.
+  - `node scripts/verify-camera-coach.mjs`: PASS.
+- **Next Steps:**
+  - Physical real-world validation of the fixed constraints for Push-ups and Crunches, and verifying MoveNet Thunder inference reliability.

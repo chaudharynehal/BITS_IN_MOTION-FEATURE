@@ -1,59 +1,5 @@
 export const VOICE_STORAGE_KEY = 'bits-motion-voice-coach';
 
-export const VOICE_CUES = Object.freeze({
-  ready: 'Ready.',
-  'no-person': 'Step into frame.',
-  'move-farther': 'Move a little farther back.',
-  'move-closer': 'Move a little closer.',
-  'full-body': 'Keep your full body in frame.',
-  'key-joints': 'Keep the key joints visible.',
-  'adjust-angle': 'Adjust the camera angle.',
-  'improve-lighting': 'Improve the lighting.',
-  'overhead-room': 'Leave overhead room.',
-  lower: 'Go lower.',
-  'curl-more': 'Curl a little further.',
-  'body-line': 'Straighten your body line.',
-  wider: 'Open wider.',
-});
-
-const NUMBER_WORDS = [
-  'Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
-  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen',
-  'Nineteen', 'Twenty',
-];
-
-function langRank(lang = '') {
-  const normalized = lang.toLowerCase();
-  if (normalized.startsWith('en-in')) return 0;
-  if (normalized.startsWith('en-gb')) return 1;
-  if (normalized.startsWith('en-us')) return 2;
-  if (normalized.startsWith('en')) return 3;
-  return 9;
-}
-
-function nameQuality(name = '') {
-  const normalized = name.toLowerCase();
-  if (/(neural|natural|premium|enhanced|siri|google|microsoft|online)/.test(normalized)) return 0;
-  if (/(female|male|voice)/.test(normalized)) return 1;
-  return 2;
-}
-
-export function selectCoachVoice(voices = []) {
-  const english = voices.filter((voice) => voice?.lang?.toLowerCase().startsWith('en'));
-  if (!english.length) return null;
-  return [...english].sort((a, b) => {
-    const byLang = langRank(a.lang) - langRank(b.lang);
-    if (byLang) return byLang;
-    const byQuality = nameQuality(a.name) - nameQuality(b.name);
-    if (byQuality) return byQuality;
-    return String(a.name || '').localeCompare(String(b.name || ''));
-  })[0];
-}
-
-export function repVoiceMessage(count) {
-  return NUMBER_WORDS[count] ? `${NUMBER_WORDS[count]}.` : `${count}.`;
-}
-
 export function isSpeechSupported(windowRef = globalThis.window) {
   return Boolean(windowRef?.speechSynthesis && windowRef?.SpeechSynthesisUtterance);
 }
@@ -66,35 +12,79 @@ export function savedVoicePreference(windowRef = globalThis.window) {
   }
 }
 
+function selectVoice(voices = []) {
+  // Use default voice first by trying to find one, but fallback gracefully
+  const sysDefault = voices.find(v => v.default);
+  if (sysDefault) return sysDefault;
+  return null;
+}
+
 export function createVoiceController({
   windowRef = globalThis.window,
   clock = () => performance.now(),
-  throttleMs = 5500,
+  throttleMs = 5000,
+  onTelemetry = () => {},
 } = {}) {
   const supported = () => isSpeechSupported(windowRef);
+  let voices = [];
+  let disposed = false;
+  
   let lastSpokenCue = '';
   let lastSpokenAt = -Infinity;
-  let voices = null;
-  let disposed = false;
-  let previousVoicesChanged = null;
+  let activeUtterance = null;
+  let nextUtteranceMessage = null;
+  let nextUtteranceIsRep = false;
+  
+  let debugData = {
+    supported: supported(),
+    voicesLoaded: 0,
+    selectedVoiceName: 'None',
+    selectedVoiceLang: 'None',
+    pending: false,
+    speaking: false,
+    paused: false,
+    lastRequested: '',
+    lastStartText: '',
+    lastStartAt: 0,
+    lastEndText: '',
+    lastEndAt: 0,
+    lastErrorText: '',
+    lastErrorAt: 0,
+    lastCancelReason: '',
+    lastCancelSource: '',
+  };
 
   const speech = () => windowRef?.speechSynthesis;
 
-  function refreshVoices() {
-    if (!supported()) {
-      voices = [];
-      return voices;
+  function emitTelemetry() {
+    if (!supported()) return;
+    const synth = speech();
+    if (synth) {
+      debugData.pending = synth.pending;
+      debugData.speaking = synth.speaking;
+      debugData.paused = synth.paused;
     }
+    const voice = selectVoice(voices);
+    if (voice) {
+      debugData.selectedVoiceName = voice.name;
+      debugData.selectedVoiceLang = voice.lang;
+    } else {
+      debugData.selectedVoiceName = 'System default';
+      debugData.selectedVoiceLang = 'System default';
+    }
+    debugData.voicesLoaded = voices.length;
+    onTelemetry({ ...debugData, queuedText: nextUtteranceMessage || 'None' });
+  }
+
+  function refreshVoices() {
+    if (!supported()) return [];
     try {
       voices = speech().getVoices?.() || [];
     } catch {
       voices = [];
     }
+    emitTelemetry();
     return voices;
-  }
-
-  function cachedVoices() {
-    return voices || refreshVoices();
   }
 
   function attachVoicesChanged() {
@@ -102,14 +92,6 @@ export function createVoiceController({
     const synthesis = speech();
     if (typeof synthesis.addEventListener === 'function') {
       synthesis.addEventListener('voiceschanged', refreshVoices);
-      return;
-    }
-    if ('onvoiceschanged' in synthesis) {
-      previousVoicesChanged = synthesis.onvoiceschanged;
-      synthesis.onvoiceschanged = (...args) => {
-        refreshVoices();
-        if (typeof previousVoicesChanged === 'function') previousVoicesChanged.apply(synthesis, args);
-      };
     }
   }
 
@@ -118,45 +100,148 @@ export function createVoiceController({
     const synthesis = speech();
     if (typeof synthesis.removeEventListener === 'function') {
       synthesis.removeEventListener('voiceschanged', refreshVoices);
-    } else if ('onvoiceschanged' in synthesis && previousVoicesChanged !== null) {
-      synthesis.onvoiceschanged = previousVoicesChanged;
     }
   }
 
-  function cancel() {
+  function cancel(reason = 'explicit', source = 'unknown') {
     if (!supported()) return;
+    
+    debugData.lastCancelReason = reason;
+    debugData.lastCancelSource = source;
+    activeUtterance = null;
+    nextUtteranceMessage = null;
+    nextUtteranceIsRep = false;
+    
     try {
       speech().cancel();
+      emitTelemetry();
     } catch {
-      // Speech is optional. Visual cues remain complete.
+      // Speech is optional
     }
   }
 
-  function speak(message, { enabled = true, force = false } = {}) {
-    if (disposed || !enabled || !supported() || !message) return false;
-    const now = clock();
-    if (!force && (message === lastSpokenCue || now - lastSpokenAt < throttleMs)) return false;
+  function processQueue() {
+    if (activeUtterance) return;
+    if (!nextUtteranceMessage) return;
+    
+    const message = nextUtteranceMessage;
+    const isRep = nextUtteranceIsRep;
+    nextUtteranceMessage = null;
+    nextUtteranceIsRep = false;
+    
+    startSpeech(message, isRep);
+  }
 
-    lastSpokenCue = message;
-    lastSpokenAt = now;
+  function startSpeech(message, isRepCount = false) {
     try {
-      cancel();
       const utterance = new windowRef.SpeechSynthesisUtterance(message);
-      const voice = selectCoachVoice(cachedVoices());
+      const voice = selectVoice(voices);
       if (voice) {
         utterance.voice = voice;
         utterance.lang = voice.lang;
-      } else {
-        utterance.lang = 'en-IN';
       }
       utterance.rate = 0.98;
-      utterance.pitch = 1;
-      utterance.volume = 0.9;
+      
+      utterance.onstart = () => {
+        debugData.lastStartText = message;
+        debugData.lastStartAt = clock();
+        emitTelemetry();
+      };
+      
+      const onComplete = () => {
+        activeUtterance = null;
+        emitTelemetry();
+        processQueue();
+      };
+      
+      utterance.onend = () => {
+        debugData.lastEndText = message;
+        debugData.lastEndAt = clock();
+        onComplete();
+      };
+      
+      utterance.onerror = (e) => {
+        debugData.lastErrorText = `Error [${e.error}]: ${message}`;
+        debugData.lastErrorAt = clock();
+        onComplete();
+      };
+
+      activeUtterance = utterance;
+      debugData.lastRequested = message;
+      
       speech().speak(utterance);
+      emitTelemetry();
       return true;
-    } catch {
+    } catch (e) {
+      debugData.lastErrorText = `Throw: ${e.message}`;
+      debugData.lastErrorAt = clock();
+      emitTelemetry();
       return false;
     }
+  }
+
+  function doSpeak(message, isRepCount = false) {
+    if (disposed || !supported() || !message) return false;
+    
+    if (activeUtterance || speech().speaking || speech().pending) {
+      if (nextUtteranceMessage === message) {
+        return false; // Drop duplicate
+      }
+      nextUtteranceMessage = message;
+      nextUtteranceIsRep = isRepCount;
+      emitTelemetry();
+      return true;
+    }
+    
+    return startSpeech(message, isRepCount);
+  }
+
+  function speak(message, { enabled = true, force = false, isRepCount = false } = {}) {
+    if (!enabled) return false;
+    
+    const now = clock();
+    
+    // Exact live-cue matching + throttle for repeat cues
+    if (!force && message === lastSpokenCue && (now - lastSpokenAt < throttleMs)) {
+      return false;
+    }
+
+    // Normalizing wording slightly per requirements "Step into frame — no body detected" -> "Step into frame."
+    let speakMessage = message;
+    if (message.includes('—')) {
+      speakMessage = message.split('—')[0].trim() + '.';
+    } else if (!message.endsWith('.')) {
+      speakMessage = message + '.';
+    }
+
+    if (doSpeak(speakMessage, isRepCount)) {
+      lastSpokenCue = message;
+      lastSpokenAt = now;
+      return true;
+    }
+    
+    return false;
+  }
+  
+  function speakRep(count, enabled = true) {
+    if (!enabled) return false;
+    
+    let message = String(count);
+    const NUMBER_WORDS = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+    if (count >= 0 && count <= 10) {
+      message = NUMBER_WORDS[count];
+    }
+    
+    if (count % 5 === 0 && count > 0) {
+      message = `${message}, keep going`;
+    }
+    
+    return speak(message, { enabled, force: true, isRepCount: true });
+  }
+
+  function directTestSpeak(message) {
+    if (!supported()) return false;
+    return doSpeak(message, true); // Force speak
   }
 
   function resetThrottle() {
@@ -167,20 +252,22 @@ export function createVoiceController({
   function dispose() {
     disposed = true;
     detachVoicesChanged();
-    cancel();
+    cancel('dispose', 'controller-dispose');
   }
 
   refreshVoices();
   attachVoicesChanged();
 
   return {
-    cancel,
+    cancel: (reason, source) => cancel(reason || 'explicit', source || 'external'),
     dispose,
     refreshVoices,
     resetThrottle,
-    selectVoice: () => selectCoachVoice(cachedVoices()),
+    selectVoice: () => selectVoice(voices),
     speak,
+    speakRep,
+    directTestSpeak,
     supported,
-    snapshot: () => ({ lastSpokenCue, lastSpokenAt, voiceCount: cachedVoices().length, disposed }),
+    snapshot: () => ({ lastSpokenCue, lastSpokenAt, voiceCount: voices.length, disposed }),
   };
 }

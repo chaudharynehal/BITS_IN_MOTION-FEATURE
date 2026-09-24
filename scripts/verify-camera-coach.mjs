@@ -145,11 +145,15 @@ class QAUtterance {
 Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: QAUtterance, configurable: true });
 Object.defineProperty(window, 'speechSynthesis', { value: {
   _listeners: {},
-  getVoices() { return [{ name: 'Natural India', lang: 'en-IN' }, { name: 'Plain US', lang: 'en-US' }]; },
+  getVoices() { return [{ name: 'Natural India', lang: 'en-IN' }, { name: 'Plain US', lang: 'en-US', default: true }]; },
   addEventListener(event, handler) { this._listeners[event] = handler; },
   removeEventListener(event, handler) { if (this._listeners[event] === handler) delete this._listeners[event]; },
   cancel() { window.__qaSpeech.cancelled += 1; },
-  speak(utterance) { window.__qaSpeech.spoken.push({ text: utterance.text, lang: utterance.lang, voice: utterance.voice?.name || null }); },
+  speak(utterance) {
+    window.__qaSpeech.spoken.push({ text: utterance.text, lang: utterance.lang, voice: utterance.voice?.name || null });
+    if (utterance.onstart) utterance.onstart();
+    if (utterance.onend) setTimeout(() => utterance.onend(), 5);
+  },
 }, configurable: true });
 window.__qaCamera = { mode: 'granted', streams: [], width: 640, height: 480 };
 window.__qaSetCameraMode = (mode) => { window.__qaCamera.mode = mode; };

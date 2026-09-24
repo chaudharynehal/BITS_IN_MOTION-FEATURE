@@ -1,7 +1,5 @@
-import { createSquatCounter, SQUAT_CONFIG } from './squatStateMachine';
-import { createCycleCounter } from './cycleStateMachine';
-import { createCrunchCounter, CRUNCH_CONFIG } from './crunchStateMachine';
 import { measureExercise } from './exerciseMeasurements';
+import { createProgressCounter } from './progressCounter';
 
 export const DETECTOR_CONFIGS = Object.freeze({
   squats: {
@@ -42,36 +40,11 @@ export const DETECTOR_CONFIGS = Object.freeze({
   },
 });
 
-function classify(exerciseId, measurement) {
-  if (!measurement.valid) return 'invalid';
-  if (exerciseId === 'squats') {
-    if (measurement.primaryValue >= SQUAT_CONFIG.standingAngle) return 'standing';
-    if (measurement.primaryValue <= SQUAT_CONFIG.downAngle) return 'down';
-    return 'transition';
-  }
-  if (exerciseId === 'pushups') {
-    if (measurement.primaryValue >= 155) return 'top';
-    if (measurement.primaryValue <= 100) return 'bottom';
-    return 'transition';
-  }
-  if (exerciseId === 'crunches') {
-    if (measurement.primaryValue >= CRUNCH_CONFIG.extendedAngle) return 'extended';
-    if (measurement.primaryValue <= CRUNCH_CONFIG.curledAngle) return 'curled';
-    return 'transition';
-  }
-  if (exerciseId === 'jumping-jacks') {
-    if (measurement.armsOpen && measurement.feetRatio >= 1.6) return 'open';
-    if (measurement.armsClosed && measurement.feetRatio <= 1.15) return 'closed';
-    return 'transition';
-  }
-  return 'invalid';
-}
-
 function phaseLabel(exerciseId, phase) {
   const labels = {
-    squats: { 'finding-standing': 'Finding start', standing: 'Standing', lowering: 'Lowering', down: 'Down position', rising: 'Standing up' },
+    squats: { 'finding-start': 'Finding start', standing: 'Standing', lowering: 'Lowering', down: 'Down position', rising: 'Standing up' },
     pushups: { 'finding-start': 'Finding start', top: 'Top position', moving: 'Lowering', bottom: 'Bottom position', returning: 'Pressing up' },
-    crunches: { 'finding-start': 'Finding start', extended: 'Extended', flexing: 'Curling up', moving: 'Curling up', flexed: 'Curled', curled: 'Curled', extending: 'Returning', returning: 'Returning' },
+    crunches: { 'finding-start': 'Finding start', extended: 'Extended', flexing: 'Curling up', flexed: 'Curled', extending: 'Returning' },
     'jumping-jacks': { 'finding-start': 'Finding start', closed: 'Closed position', moving: 'Opening', open: 'Open position', returning: 'Closing' },
   };
   return labels[exerciseId]?.[phase] || 'Tracking';
@@ -84,13 +57,19 @@ function feedbackFor(exerciseId, measurement, state) {
     && measurement.bodyAngle < 150) {
     return { key: 'body-line', message: 'Bring your hips into a straighter line', tone: 'warning', priority: 6, holdMs: 850 };
   }
-  if (!measurement.valid || measurement.framingReason && measurement.framingReason !== 'ready') {
+  if (!measurement.valid || (measurement.framingReason && measurement.framingReason !== 'ready')) {
+    // PERSON vs EXERCISE READY: only say "no person" when MediaPipe genuinely
+    // has no credible human pose. A present person with legs out of frame or a
+    // weak joint gets a framing cue, never "no person".
+    if (!measurement.personDetected) {
+      return { key: 'no-person', message: 'Step into frame so we can see you', tone: 'warning', priority: 6, holdMs: 1300 };
+    }
     const framing = {
-      'no-person': ['no-person', 'No person detected — step into view'],
+      'no-person': ['full-body', 'Step back so your full body is visible'],
       'move-farther': ['move-farther', 'Move farther away — keep your whole body in frame'],
       'move-closer': ['move-closer', 'Move a little closer so your joints are clear'],
-      'full-body': ['full-body', 'Full body not visible — adjust distance or camera tilt'],
-      'key-joints': ['key-joints', exerciseId === 'crunches' ? 'Keep your shoulder, hip and knee visible' : 'Keep the key joints visible'],
+      'full-body': ['full-body', exerciseId === 'squats' ? 'Step back so your knees and ankles are visible' : 'Full body not visible — adjust distance or camera tilt'],
+      'key-joints': ['key-joints', exerciseId === 'crunches' ? 'Keep your shoulder, hip and knee visible' : 'Adjust your position so the key joints are visible'],
       'adjust-angle': ['adjust-angle', exerciseId === 'crunches' ? 'Set the camera low and side-on to your shoulders and hips' : 'Turn side-on and lower the camera angle'],
       'improve-lighting': ['improve-lighting', 'Improve lighting so the camera can see your joints'],
       'overhead-room': ['overhead-room', 'Move farther back or tilt up to keep overhead room'],
@@ -100,9 +79,9 @@ function feedbackFor(exerciseId, measurement, state) {
   if (state.event === 'rep') return { key: 'great-rep', message: 'Great rep', tone: 'success', priority: 8, holdMs: 1200 };
 
   if (exerciseId === 'squats') {
-    if (state.event === 'depth' || state.phase === 'down') return { key: 'good-depth', message: 'Good depth — stand back up', tone: 'success', priority: 7, holdMs: 850 };
-    if (state.phase === 'lowering' && measurement.primaryValue <= SQUAT_CONFIG.shallowCueAngle) return { key: 'lower', message: 'Go slightly lower', tone: 'warning', priority: 4, holdMs: 750 };
-    return { key: 'ready', message: state.phase === 'finding-standing' ? 'Stand tall to begin' : 'Ready — lower with control', tone: 'neutral', priority: 1, holdMs: 650 };
+    if (state.event === 'target' || state.phase === 'down') return { key: 'good-depth', message: 'Good depth — stand back up', tone: 'success', priority: 7, holdMs: 850 };
+    if (state.phase === 'lowering' && measurement.primaryValue <= 145) return { key: 'lower', message: 'Go slightly lower', tone: 'warning', priority: 4, holdMs: 750 };
+    return { key: 'ready', message: state.phase === 'finding-start' ? 'Stand tall to begin' : 'Ready — lower with control', tone: 'neutral', priority: 1, holdMs: 650 };
   }
   if (exerciseId === 'pushups') {
     if (measurement.bodyAngle < 150) return { key: 'body-line', message: 'Bring your hips into a straighter line', tone: 'warning', priority: 6, holdMs: 850 };
@@ -111,7 +90,7 @@ function feedbackFor(exerciseId, measurement, state) {
     return { key: 'ready', message: state.phase === 'finding-start' ? 'Straighten your arms to begin' : 'Ready — lower with control', tone: 'neutral', priority: 1, holdMs: 650 };
   }
   if (exerciseId === 'crunches') {
-    if (state.event === 'target' || state.phase === 'curled' || state.phase === 'flexed') return { key: 'return', message: 'Good curl — return with control', tone: 'success', priority: 7, holdMs: 850 };
+    if (state.event === 'target' || state.phase === 'flexed') return { key: 'return', message: 'Good curl — return with control', tone: 'success', priority: 7, holdMs: 850 };
     if (state.phase === 'flexing' && measurement.primaryValue < 128) return { key: 'curl-more', message: 'Curl slightly further', tone: 'warning', priority: 4, holdMs: 750 };
     return { key: 'ready', message: state.phase === 'finding-start' ? 'Extend your torso to begin' : 'Ready — curl with control', tone: 'neutral', priority: 1, holdMs: 650 };
   }
@@ -122,69 +101,68 @@ function feedbackFor(exerciseId, measurement, state) {
 
 export function createExerciseDetector(exerciseId = 'squats', options = {}) {
   const id = DETECTOR_CONFIGS[exerciseId] ? exerciseId : 'squats';
-  const measurementProvider = options.measurementProvider || ((landmarks) => measureExercise(id, landmarks));
-  const shouldSmooth = !options.measurementProvider || options.smoothMeasurements === true;
-  const counter = id === 'squats'
-    ? createSquatCounter()
-    : id === 'crunches'
-      ? createCrunchCounter()
-      : createCycleCounter({
-      startState: id === 'pushups' ? 'top' : id === 'crunches' ? 'extended' : 'closed',
-      targetState: id === 'pushups' ? 'bottom' : id === 'crunches' ? 'curled' : 'open',
-      minRepIntervalMs: id === 'jumping-jacks' ? 500 : 700,
-    });
-  let measurementWindow = [];
-
-  function smoothMeasurement(measurement) {
-    if (!measurement.valid) {
-      measurementWindow = [];
-      return measurement;
-    }
-    measurementWindow.push(measurement);
-    if (measurementWindow.length > 5) measurementWindow.shift();
-    const numericMedian = (key) => {
-      const values = measurementWindow.map((item) => item[key]).filter(Number.isFinite).sort((a, b) => a - b);
-      return values.length ? values[Math.floor(values.length / 2)] : measurement[key];
-    };
-    const majority = (key) => measurementWindow.filter((item) => item[key]).length > measurementWindow.length / 2;
-    return {
-      ...measurement,
-      primaryValue: numericMedian('primaryValue'),
-      bodyAngle: numericMedian('bodyAngle'),
-      feetRatio: numericMedian('feetRatio'),
-      shoulderKneeRatio: numericMedian('shoulderKneeRatio'),
-      torsoCompression: numericMedian('torsoCompression'),
-      shoulderLift: numericMedian('shoulderLift'),
-      worldAngle: numericMedian('worldAngle'),
-      imageAngle: numericMedian('imageAngle'),
-      armsOpen: majority('armsOpen'),
-      armsClosed: majority('armsClosed'),
-      visibility: Math.min(...measurementWindow.map((item) => item.visibility ?? 0)),
-    };
-  }
+  let lockedSide = null;
+  
+  const counter = createProgressCounter({ id, debounceMs: 400, activeThreshold: 0.70, returnThreshold: 0.35 });
+  
+  // Baselines for personal ROM
+  let baselineAngle = null;
+  let baselineFeetRatio = null;
 
   function update(landmarks, timestamp = performance.now()) {
-    const rawMeasurement = measurementProvider(landmarks);
-    const measurement = shouldSmooth ? smoothMeasurement(rawMeasurement) : rawMeasurement;
-    const classification = classify(id, measurement);
-    const counterVisibility = measurement.valid ? measurement.visibility : 0;
-    const counterValue = measurement.valid ? measurement.primaryValue : null;
-    const state = id === 'squats'
-      ? counter.update({ angle: counterValue, visibility: counterVisibility, timestamp })
-      : id === 'crunches'
-        ? counter.update({
-          angle: counterValue,
-          shoulderKneeRatio: measurement.shoulderKneeRatio,
-          torsoCompression: measurement.torsoCompression,
-          visibility: counterVisibility,
-          timestamp,
-        })
-        : counter.update({ classification, visibility: counterVisibility, timestamp });
+    const isActive = counter.snapshot().active;
+    const rawMeasurement = options.measurementProvider
+      ? options.measurementProvider(landmarks)
+      : measureExercise(id, landmarks, { preferredSide: lockedSide, preferenceThreshold: isActive ? 0 : 0.45 });
+
+    if (rawMeasurement.valid && rawMeasurement.side) {
+      lockedSide = rawMeasurement.side;
+    }
+
+    let progressRaw = 0;
+    
+    if (rawMeasurement.valid) {
+      if (id === 'squats') {
+        const angle = rawMeasurement.primaryValue;
+        if (baselineAngle === null || (angle > baselineAngle && !isActive)) baselineAngle = angle;
+        const baseline = Math.max(baselineAngle, 160); 
+        progressRaw = Math.max(0, Math.min(1, (baseline - angle) / (baseline - 95)));
+      } else if (id === 'pushups') {
+        const angle = rawMeasurement.primaryValue;
+        if (baselineAngle === null || (angle > baselineAngle && !isActive)) baselineAngle = angle;
+        const baseline = Math.max(baselineAngle, 155); 
+        progressRaw = Math.max(0, Math.min(1, (baseline - angle) / (baseline - 90)));
+      } else if (id === 'crunches') {
+        const angle = rawMeasurement.primaryValue;
+        if (baselineAngle === null || (angle > baselineAngle && !isActive)) baselineAngle = angle;
+        const baseline = Math.min(Math.max(baselineAngle, 135), 150);
+        const angleProgress = Math.max(0, Math.min(1, (baseline - angle) / 35));
+        
+        // Torso compression from exerciseMeasurements
+        // baselineTorsoCompression is usually larger, it reduces as we crunch
+        // So let's combine it with shoulderKneeRatio if needed, but angle is quite reliable if baseline is set.
+        progressRaw = angleProgress;
+      } else if (id === 'jumping-jacks') {
+        const feetRatio = rawMeasurement.feetRatio;
+        if (baselineFeetRatio === null || (feetRatio < baselineFeetRatio && !isActive)) baselineFeetRatio = feetRatio;
+        const baseline = Math.min(baselineFeetRatio, 1.25);
+        const feetProgress = Math.max(0, Math.min(1, (feetRatio - baseline) / 0.45)); // e.g. 1.25 -> 1.70
+        const armsProgress = rawMeasurement.armsOpen ? 1 : (rawMeasurement.armsClosed ? 0 : 0.5);
+        
+        progressRaw = (feetProgress + armsProgress) / 2;
+      }
+    }
+
+    const state = counter.update(progressRaw, rawMeasurement.valid, timestamp);
+
     return {
       ...state,
       phaseLabel: phaseLabel(id, state.phase),
-      measurement,
-      feedback: feedbackFor(id, measurement, state),
+      personDetected: Boolean(rawMeasurement.personDetected),
+      exerciseReady: Boolean(rawMeasurement.valid),
+      measurement: rawMeasurement,
+      rawMeasurement: rawMeasurement,
+      feedback: feedbackFor(id, rawMeasurement, state),
     };
   }
 
@@ -193,11 +171,16 @@ export function createExerciseDetector(exerciseId = 'squats', options = {}) {
     config: DETECTOR_CONFIGS[id],
     update,
     reset: () => {
-      measurementWindow = [];
+      lockedSide = null;
+      baselineAngle = null;
+      baselineFeetRatio = null;
       return counter.reset();
     },
     snapshot: () => counter.snapshot(),
   };
 }
 
-export { classify as classifyExerciseMeasurement };
+export function classifyExerciseMeasurement(exerciseId, measurement) {
+  // Keeping this for compatibility if it's used directly
+  return 'invalid'; 
+}

@@ -40,15 +40,19 @@ function sideVisibility(landmarks, side) {
   return Math.min(...points.map((point) => point.visibility ?? 0));
 }
 
-export function getBestKneeMeasurement(landmarks, visibilityThreshold = 0.6) {
+export function getBestKneeMeasurement(landmarks, visibilityThreshold = 0.6, preferredSide = null, preferenceThreshold = 0.45) {
   if (!Array.isArray(landmarks) || landmarks.length < 29) {
     return { valid: false, angle: null, side: null, visibility: 0 };
   }
 
   const leftVisibility = sideVisibility(landmarks, 'left');
   const rightVisibility = sideVisibility(landmarks, 'right');
-  const side = leftVisibility >= rightVisibility ? 'left' : 'right';
-  const visibility = Math.max(leftVisibility, rightVisibility);
+
+  let side = leftVisibility >= rightVisibility ? 'left' : 'right';
+  if (preferredSide === 'left' && leftVisibility >= preferenceThreshold) side = 'left';
+  if (preferredSide === 'right' && rightVisibility >= preferenceThreshold) side = 'right';
+
+  const visibility = side === 'left' ? leftVisibility : rightVisibility;
 
   if (visibility < visibilityThreshold) {
     return { valid: false, angle: null, side, visibility };
