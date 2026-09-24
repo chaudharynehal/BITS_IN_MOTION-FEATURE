@@ -9,7 +9,10 @@ function hold(detector, measurement, start) {
   return result;
 }
 
-const provider = (measurement) => ({ visibility: 1, valid: true, metricLabel: 'Angle', metricUnit: '°', ...measurement });
+const provider = (measurement) => {
+  const vis = measurement.visibility ?? 1;
+  return { visibility: vis, valid: vis >= 0.55, metricLabel: 'Angle', metricUnit: '°', ...measurement };
+};
 
 describe('multi-exercise detectors', () => {
   it.each([

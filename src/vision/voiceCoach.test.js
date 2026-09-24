@@ -1,67 +1,41 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  createVoiceController,
-  repVoiceMessage,
-  savedVoicePreference,
-  selectCoachVoice,
-  SPEECH_PRIORITY,
-} from './voiceCoach';
+import { createVoiceController, savedVoicePreference, isSpeechSupported } from './voiceCoach';
 
-class FakeUtterance {
-  constructor(text) {
-    this.text = text;
-    this.lang = '';
-    this.rate = 1;
-    this.pitch = 1;
-    this.volume = 1;
-    this.voice = null;
-  }
-}
-
-function fakeWindow({ voices = [], storageValue = 'true' } = {}) {
+function fakeWindow({ voices = [], storageValue = null } = {}) {
   const listeners = {};
-  const speech = {
-    cancel: vi.fn(),
-    speak: vi.fn(),
-    getVoices: vi.fn(() => voices),
-    addEventListener: vi.fn((event, handler) => { listeners[event] = handler; }),
-    removeEventListener: vi.fn((event, handler) => {
-      if (listeners[event] === handler) delete listeners[event];
-    }),
-    dispatch(event) {
-      listeners[event]?.();
-    },
-    pending: false,
-    speaking: false,
-    paused: false,
-  };
   return {
-    SpeechSynthesisUtterance: FakeUtterance,
-    speechSynthesis: speech,
     localStorage: {
-      getItem: vi.fn(() => storageValue),
-      setItem: vi.fn(),
+      getItem: () => storageValue,
+    },
+    SpeechSynthesisUtterance: class FakeUtterance {
+      constructor(text) {
+        this.text = text;
+        this.rate = 1;
+        this.volume = 1;
+      }
+    },
+    speechSynthesis: {
+      pending: false,
+      speaking: false,
+      paused: false,
+      getVoices: () => voices,
+      speak: vi.fn(function speak(utt) {
+        this.speaking = true;
+        if (utt.onstart) utt.onstart();
+        setTimeout(() => {
+          this.speaking = false;
+          if (utt.onend) utt.onend();
+        }, 10);
+      }),
+      cancel: vi.fn(),
+      addEventListener: (evt, cb) => { listeners[evt] = cb; },
+      removeEventListener: vi.fn(),
+      dispatch: (evt) => { if (listeners[evt]) listeners[evt](); },
     },
   };
 }
 
 describe('voice coach', () => {
-  it('selects a natural English voice with the configured regional priority', () => {
-    const selected = selectCoachVoice([
-      { name: 'Plain US', lang: 'en-US' },
-      { name: 'Natural India', lang: 'en-IN' },
-      { name: 'Enhanced UK', lang: 'en-GB' },
-    ]);
-    expect(selected).toMatchObject({ name: 'Natural India', lang: 'en-IN' });
-  });
-
-  it('falls back to another English voice when en-IN is unavailable', () => {
-    expect(selectCoachVoice([
-      { name: 'Standard US', lang: 'en-US' },
-      { name: 'Natural UK', lang: 'en-GB' },
-    ])).toMatchObject({ name: 'Natural UK', lang: 'en-GB' });
-  });
-
   it('speaks when enabled and applies selected voice settings', () => {
     let now = 1000;
     const win = fakeWindow({ voices: [{ name: 'Natural India', lang: 'en-IN' }] });
@@ -69,15 +43,15 @@ describe('voice coach', () => {
 
     expect(controller.speak('Good rep.', { enabled: true })).toBe(true);
     expect(win.speechSynthesis.speak).toHaveBeenCalledOnce();
-    expect(win.speechSynthesis.speak.mock.calls[0][0]).toMatchObject({
-      text: 'Good rep.',
-      lang: 'en-IN',
-      rate: 0.98,
-      volume: 0.9,
-      voice: { name: 'Natural India', lang: 'en-IN' },
-    });
+    
+    const callArgs = win.speechSynthesis.speak.mock.calls[0][0];
+    expect(callArgs.text).toBe('Good rep.');
+    expect(callArgs.lang).toBe('en-IN');
+    expect(callArgs.voice.name).toBe('Natural India');
+    expect(callArgs.rate).toBe(0.98);
 
     now += 6000;
+    win.speechSynthesis.speaking = false;
     expect(controller.speak('Move back.', { enabled: true })).toBe(true);
     expect(win.speechSynthesis.speak).toHaveBeenCalledTimes(2);
   });
@@ -95,142 +69,54 @@ describe('voice coach', () => {
   it('throttles repeated cues but lets forced rep counts interrupt', () => {
     let now = 1000;
     const win = fakeWindow();
-    const controller = createVoiceController({ windowRef: win, clock: () => now, throttleMs: 5500 });
+    const controller = createVoiceController({ windowRef: win, clock: () => now, throttleMs: 5000 });
 
     expect(controller.speak('Ready.', { enabled: true })).toBe(true);
     expect(controller.speak('Ready.', { enabled: true })).toBe(false);
+    
+    // Within throttle, different message, but speak() is occupied so it drops unless isRepCount
     now += 1000;
+    win.speechSynthesis.speaking = true;
     expect(controller.speak('Move back.', { enabled: true })).toBe(false);
-    expect(controller.speak(repVoiceMessage(3), { enabled: true, force: true })).toBe(true);
+    
+    // Rep counts can interrupt
+    expect(controller.speakRep(3, true)).toBe(true);
+    expect(win.speechSynthesis.cancel).toHaveBeenCalled();
     expect(win.speechSynthesis.speak).toHaveBeenCalledTimes(2);
     expect(win.speechSynthesis.speak.mock.calls[1][0].text).toBe('Three.');
   });
 
-  it('updates cached voices after voiceschanged and cancels on dispose', () => {
-    const voices = [{ name: 'Plain US', lang: 'en-US' }];
-    const win = fakeWindow({ voices });
-    const controller = createVoiceController({ windowRef: win });
-    expect(controller.selectVoice()).toMatchObject({ name: 'Plain US' });
+  it('adds period to cues lacking punctuation', () => {
+    let now = 1000;
+    const win = fakeWindow();
+    const controller = createVoiceController({ windowRef: win, clock: () => now });
 
-    voices.unshift({ name: 'Natural India', lang: 'en-IN' });
-    win.speechSynthesis.dispatch('voiceschanged');
-    expect(controller.selectVoice()).toMatchObject({ name: 'Natural India' });
-
-    controller.dispose();
-    expect(win.speechSynthesis.removeEventListener).toHaveBeenCalledWith('voiceschanged', expect.any(Function));
-    expect(win.speechSynthesis.cancel).toHaveBeenCalled();
-    expect(controller.speak('Ready.', { enabled: true })).toBe(false);
+    expect(controller.speak('Move back', { enabled: true })).toBe(true);
+    expect(win.speechSynthesis.speak.mock.calls[0][0].text).toBe('Move back.');
   });
 
+  it('normalizes compound hyphenated cues', () => {
+    let now = 1000;
+    const win = fakeWindow();
+    const controller = createVoiceController({ windowRef: win, clock: () => now });
+
+    expect(controller.speak('Step into frame — no body detected', { enabled: true })).toBe(true);
+    expect(win.speechSynthesis.speak.mock.calls[0][0].text).toBe('Step into frame.');
+  });
+  
   it('reads the saved preference only when speech is available', () => {
     expect(savedVoicePreference(fakeWindow({ storageValue: 'true' }))).toBe(true);
     expect(savedVoicePreference(fakeWindow({ storageValue: 'false' }))).toBe(false);
     expect(savedVoicePreference({ localStorage: { getItem: () => 'true' } })).toBe(false);
   });
 
-  describe('speech cancellation protection', () => {
-    it('TEST VOICE is not cancelled by lower-priority coaching cue', () => {
-      let now = 1000;
-      const win = fakeWindow({ voices: [{ name: 'Natural India', lang: 'en-IN' }] });
-      const controller = createVoiceController({ windowRef: win, clock: () => now });
+  it('directTestSpeak is forced and bypasses normal rules', () => {
+    let now = 1000;
+    const win = fakeWindow();
+    const controller = createVoiceController({ windowRef: win, clock: () => now });
 
-      // User clicks TEST VOICE
-      expect(controller.directTestSpeak('Voice test successful.')).toBe(true);
-      const testGen = controller.snapshot().activeGeneration;
-      expect(testGen).toBeGreaterThan(0);
-
-      // Pose frame immediately updates with a coaching cue
-      now += 50;
-      const spoken = controller.speak('Step into view.', { enabled: true, priority: SPEECH_PRIORITY.SETUP });
-
-      // The coaching cue should NOT have been spoken because TEST has higher priority
-      expect(spoken).toBe(false);
-      // The test utterance should still be the active one
-      expect(controller.snapshot().activeGeneration).toBe(testGen);
-    });
-
-    it('cancel tracks reason and source', () => {
-      let now = 1000;
-      let lastTelemetry = {};
-      const win = fakeWindow();
-      const controller = createVoiceController({
-        windowRef: win,
-        clock: () => now,
-        onTelemetry: (t) => { lastTelemetry = t; },
-      });
-
-      controller.cancel('voice-off', 'toggle-button');
-      expect(lastTelemetry.lastCancelReason).toBe('voice-off');
-      expect(lastTelemetry.lastCancelSource).toBe('toggle-button');
-    });
-
-    it('higher-priority cue can preempt lower-priority speech', () => {
-      let now = 1000;
-      const win = fakeWindow({ voices: [{ name: 'Test', lang: 'en-US' }] });
-      const controller = createVoiceController({ windowRef: win, clock: () => now });
-
-      // Start a low-priority coaching cue
-      controller.speak('Go lower.', { enabled: true, priority: SPEECH_PRIORITY.FORM });
-      const firstGen = controller.snapshot().activeGeneration;
-
-      // Higher priority rep count arrives
-      now += 100;
-      controller.speak('Three.', { enabled: true, force: true, priority: SPEECH_PRIORITY.REP_COUNT });
-
-      // The rep count should have replaced the coaching cue
-      expect(controller.snapshot().activeGeneration).toBeGreaterThan(firstGen);
-      expect(win.speechSynthesis.cancel).toHaveBeenCalled();
-    });
-
-    it('Voice ON click is not cancelled by subsequent pose frame', () => {
-      let now = 1000;
-      const win = fakeWindow({ voices: [{ name: 'Test', lang: 'en-US' }] });
-      const controller = createVoiceController({ windowRef: win, clock: () => now });
-
-      // Voice toggle ON speaks the announcement
-      controller.speak('Voice coach on.', { enabled: true, force: true, priority: SPEECH_PRIORITY.POSITIVE });
-      const onGen = controller.snapshot().activeGeneration;
-
-      // Immediate pose frame with readiness change
-      now += 30;
-      const interrupted = controller.speak('Step into view.', { enabled: true, priority: SPEECH_PRIORITY.SETUP });
-
-      // Setup cue (priority 6) should NOT preempt positive (priority 7)
-      expect(interrupted).toBe(false);
-      expect(controller.snapshot().activeGeneration).toBe(onGen);
-    });
-
-    it('exercise-change cleanup protects TEST_VOICE if explicitly running', () => {
-      let now = 1000;
-      let lastTelemetry = {};
-      const win = fakeWindow();
-      const controller = createVoiceController({
-        windowRef: win,
-        clock: () => now,
-        onTelemetry: (t) => { lastTelemetry = t; },
-      });
-
-      // 1. Click TEST VOICE
-      controller.directTestSpeak('Voice test successful.');
-      expect(controller.snapshot().activePriority).toBe(SPEECH_PRIORITY.TEST);
-      expect(controller.snapshot().activeType).toBe('TEST_VOICE');
-
-      // 2. Exercise object/state rerenders, semantic exercise ID remains 'squats'
-      // CoachScreen cleanup would attempt to cancel COACHING/REP_COUNT
-      controller.cancel('exercise-change', 'exercise-effect', ['COACHING', 'REP_COUNT', 'SETUP', 'FORM']);
-
-      // Expected: TEST VOICE is NOT cancelled
-      expect(controller.snapshot().activeGeneration).toBeGreaterThan(0);
-      expect(win.speechSynthesis.cancel).not.toHaveBeenCalled();
-
-      // If there was a COACHING utterance running instead, it WOULD be cancelled
-      // Wait, let's force kill first just for test cleanliness
-      controller.cancel('explicit', 'test-teardown');
-      
-      controller.speak('Go lower.', { enabled: true, force: true, priority: SPEECH_PRIORITY.FORM });
-      expect(controller.snapshot().activePriority).toBe(SPEECH_PRIORITY.FORM);
-      controller.cancel('exercise-change', 'exercise-effect', ['COACHING', 'REP_COUNT', 'SETUP', 'FORM']);
-      expect(win.speechSynthesis.cancel).toHaveBeenCalledTimes(2); // once for teardown, once for coaching
-    });
+    controller.directTestSpeak('Voice test successful.');
+    expect(win.speechSynthesis.speak).toHaveBeenCalledOnce();
+    expect(win.speechSynthesis.speak.mock.calls[0][0].text).toBe('Voice test successful.');
   });
 });

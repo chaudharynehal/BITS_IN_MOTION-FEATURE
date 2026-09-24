@@ -1,0 +1,28 @@
+--- PROJECT_STATE.md
++++ PROJECT_STATE.md
+@@ -107,17 +107,18 @@
+ ## Camera Intelligence V4 (MediaPipe-only Production Hardening Pass)
+ 
+ - **Branch:** `feature/camera-intelligence-v4`
+-- **Status:** Local implementation complete, verified, and pushed. NOT MERGED, NOT DEPLOYED per instructions.
++- **Status:** Local implementation complete, refactored per Emergent protocol, verified, and pushed. NOT MERGED, NOT DEPLOYED per instructions.
+ - **Ownership:** Camera pipeline, MediaPipe backend, state machines, voice coaching race condition.
+-- **MoveNet Removal:** MoveNet provider, TensorFlow backend, debug UI, and dependencies completely removed. MediaPipe is now the single production pose provider. `CoachScreen.js` bundle size was reduced by ~1.8MB (90.4% reduction).
+-- **Time-based Grace Periods & Active Tracking:** Replaced all hard frame counts with time-based duration thresholds for smoothing and state stability.
++- **MoveNet Removal:** MoveNet provider, TensorFlow backend, and dependencies remain completely removed. MediaPipe is the single production pose provider.
++- **Single Progress Contract:** All exercises now convert raw body geometry directly into a normalized `progress` metric (0..1) instead of using intermediate rigid phase gates.
+ - **Side Locking:** Side is strictly locked during an active rep. Side selection only switches if not in an active rep, or if the current side is unusable for a sustained 1.2s.
+ - **Exercise-Specific Readiness:** Generalized full-body readiness checks replaced with targeted upper/lower body framing rules (e.g., Push-ups no longer require ankle visibility, only upper body and hips).
+-- **Crunch State Machine:** Reworked around relative motion from the user's extended position with hysteresis. Valid rep conceptually tracks EXTENDED -> FLEXING -> FLEXED -> EXTENDING -> EXTENDED -> COUNT.
+-- **Push-up State Machine (NEW):** Created dedicated state machine focused on return-to-top logic, remembering bottom ROM, and returning toward an individual top baseline.
+-- **Jumping Jack State Machine (NEW):** Created dedicated state machine using relative openness with a personal closed baseline (arms down, legs relatively together) and open condition.
+-- **Voice Coaching Fix:** Fixed race condition where coaching updates continuously cancelled TEST VOICE. Implemented an ownership-token-based controller and `SPEECH_PRIORITY` levels (TEST: 10, REP_COUNT: 9, POSITIVE: 7, SETUP: 6, FORM: 4). `TEST VOICE` is now immune to lower-priority frame-loop cancellation. Added cancel reason/source telemetry.
+-- **JSONL Trace Infrastructure:** Added `src/vision/testing/jsonlReplay.test.js` infrastructure to play real captured JSONL traces through the `exerciseDetectors`.
++- **Hysteresis & Light Smoothing:** Replaced old custom state machines with a unified EMA smoothing (alpha ~0.35) and hysteresis system. progress > ~0.70 activates the rep; progress < ~0.35 counts the rep. Fast peaks (wrist movement, crunch peaks) are preserved.
++- **Crunch Calibration:** Crunch now computes progress based on relative torso angle reduction from an individual baseline, completely eliminating complex required states (EXTENDED -> CURLING -> CURLED -> RETURNING -> EXTENDED).
++- **Push-up Calibration:** Uses user's personal top baseline.
++- **Jumping Jack Calibration:** Normalized stance width and arm height now use a personal closed stance baseline.
++- **Voice Control Simplification:** Completely removed complex prioritization levels. The voice controller now strictly mirrors the canonical visible text cue (SINGLE SOURCE OF TRUTH). Rep count takes priority. Repeating cues are safely throttled, and explicit cancel calls are eliminated unless necessary (e.g., track ended, toggled off).
+ - **Verification:**
+   - `npm test`: 20 suites, 970 passed, 0 failed.
+   - `npm run build`: PASS (bundle significantly smaller).

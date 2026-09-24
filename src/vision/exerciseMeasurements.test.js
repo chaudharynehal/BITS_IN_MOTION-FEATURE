@@ -61,7 +61,7 @@ describe('exercise landmark measurements', () => {
     feed(detector, sidePose(), 0);
     feed(detector, sidePose({ shoulder: [0.48, 0.35] }), 800);
     feed(detector, sidePose(), 1800);
-    expect(detector.snapshot()).toEqual({ reps: 1, phase: 'extended' });
+    expect(detector.snapshot().reps).toBe(1);
   });
 
   it('does not count a synthetic partial crunch', () => {

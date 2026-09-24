@@ -6,7 +6,7 @@ import { createPoseProvider } from '../vision/poseProvider';
 import { createExerciseDetector, DETECTOR_CONFIGS } from '../vision/exerciseDetectors';
 import { createSubjectTracker } from '../vision/subjectContinuity';
 import { createVideoBrightnessSampler } from '../vision/frameReadiness';
-import { VOICE_CUES, VOICE_STORAGE_KEY, SPEECH_PRIORITY, createVoiceController, repVoiceMessage, savedVoicePreference } from '../vision/voiceCoach';
+import { VOICE_STORAGE_KEY, createVoiceController, savedVoicePreference } from '../vision/voiceCoach';
 
 const INITIAL_FEEDBACK = { key: 'initial', message: 'Keep your full body visible and follow the setup guide', tone: 'neutral', priority: 0, until: 0 };
 
@@ -74,6 +74,8 @@ export default function CoachScreen({
   const [videoAspect, setVideoAspect] = useState(4 / 3);
   const [previewSummary, setPreviewSummary] = useState(null);
   const [voiceEnabled, setVoiceEnabled] = useState(savedVoicePreference);
+  const voiceEnabledRef = useRef(voiceEnabled);
+  useEffect(() => { voiceEnabledRef.current = voiceEnabled; }, [voiceEnabled]);
   const lastSpokenRepRef = useRef(0);
   const [voiceTelemetry, setVoiceTelemetry] = useState({});
   if (voiceControllerRef.current === null) voiceControllerRef.current = createVoiceController({ onTelemetry: (data) => setVoiceTelemetry(data) });
@@ -83,9 +85,9 @@ export default function CoachScreen({
     if (previewSummary) summaryRef.current?.showModal();
   }, [previewSummary]);
 
-  const speakCue = useCallback((message, { force = false, priority = SPEECH_PRIORITY.FORM } = {}) => {
-    voiceControllerRef.current?.speak(message, { enabled: voiceEnabled && speechSupported, force, priority });
-  }, [speechSupported, voiceEnabled]);
+  const speakCue = useCallback((message, { force = false } = {}) => {
+    voiceControllerRef.current?.speak(message, { enabled: voiceEnabledRef.current && speechSupported, force });
+  }, [speechSupported]);
 
   const publishFeedback = useCallback((cue) => {
     const now = performance.now();
@@ -94,7 +96,7 @@ export default function CoachScreen({
     if (cue.message === current.message) {
       if (!current.spoken && (now - current.firstSeen) > 400) {
         current.spoken = true;
-        if (VOICE_CUES[cue.key]) speakCue(VOICE_CUES[cue.key], { force: false, priority: cue.priority });
+        speakCue(cue.message, { force: false });
       }
       current.until = now + (cue.holdMs || 700);
       return;
@@ -116,7 +118,7 @@ export default function CoachScreen({
     // framing cues (priority 6) are 400ms stable.
     if (cue.priority >= 7) {
       next.spoken = true;
-      if (VOICE_CUES[cue.key]) speakCue(VOICE_CUES[cue.key], { force: true, priority: cue.priority });
+      speakCue(cue.message, { force: true });
     }
   }, [speakCue]);
 
@@ -138,7 +140,6 @@ export default function CoachScreen({
 
     // Only cancel if this is a genuine exercise change, not just a mount/remount
     if (previousExerciseIdRef.current !== exerciseId) {
-      voiceControllerRef.current?.cancel('exercise-change', 'exercise-effect', ['COACHING', 'REP_COUNT', 'SETUP', 'FORM']);
     }
     previousExerciseIdRef.current = exerciseId;
 
@@ -231,7 +232,7 @@ export default function CoachScreen({
           worldLandmarks: trackedPose?.worldLandmarks,
           frameBrightness: brightness,
         }, now);
-        const measurement = state.measurement;
+        const measurement = state.rawMeasurement;
 
         // Diagnostic Data update
         if (isDebugMode) {
@@ -246,7 +247,11 @@ export default function CoachScreen({
               latency: Math.round(avgLatency),
               poseDetected: !!landmarks,
               side: measurement.side || 'N/A',
-              rawAngle: state.rawMeasurement?.primaryValue
+              rawAngle: state.rawMeasurement?.primaryValue,
+              progressRaw: state.progressRaw,
+              progressSmoothed: state.progress,
+              activeArmed: state.active,
+              maxProgress: state.maxProgress,
             };
             if (state.event === 'rejected') updates.lastRejection = state.rejectReason || 'NOT_READY';
             else if (state.event) updates.lastTransition = state.event;
@@ -271,7 +276,7 @@ export default function CoachScreen({
 
         if (state.reps > lastSpokenRepRef.current) {
           lastSpokenRepRef.current = state.reps;
-          speakCue(repVoiceMessage(state.reps), { force: true });
+          voiceControllerRef.current?.speakRep(state.reps, voiceEnabledRef.current);
         }
 
         const nextUi = {
@@ -369,7 +374,7 @@ export default function CoachScreen({
       sessionStartedAtRef.current = Date.now();
       lastVideoTimeRef.current = -1;
       setCameraStatus('running');
-      speakCue(VOICE_CUES.ready, { force: true });
+      speakCue('Ready.', { force: true });
       animationRef.current = requestAnimationFrame(processFrame);
     } catch (error) {
       if (!mountedRef.current || request.signal.aborted) return;
@@ -537,9 +542,12 @@ export default function CoachScreen({
           <div>FPS: {diagnosticData.fps} | Latency: {diagnosticData.latency}ms</div>
           <div>Pose Detected: {diagnosticData.poseDetected ? 'YES' : 'NO'} | Side: {diagnosticData.side}</div>
           <div>Exercise: {exerciseId} | Phase: {stage}</div>
+          <div>Progress Raw: {typeof diagnosticData.progressRaw === 'number' ? diagnosticData.progressRaw.toFixed(2) : 'N/A'} | Smoothed: {typeof diagnosticData.progressSmoothed === 'number' ? diagnosticData.progressSmoothed.toFixed(2) : 'N/A'}</div>
+          <div>Active armed: {diagnosticData.activeArmed ? 'YES' : 'NO'} | Max Progress: {typeof diagnosticData.maxProgress === 'number' ? diagnosticData.maxProgress.toFixed(2) : 'N/A'}</div>
           <div>Reps: {reps}</div>
-          <div>Smoothed Angle: {measurementValue}{measurementUnit} | Raw: {diagnosticData.rawAngle ? Math.round(diagnosticData.rawAngle * 10)/10 : 'N/A'}{measurementUnit}</div>
+          <div>Metric: {measurementValue}{measurementUnit} | Raw: {diagnosticData.rawAngle ? Math.round(diagnosticData.rawAngle * 10)/10 : 'N/A'}{measurementUnit}</div>
           <div>Visible Cue: {feedback.message}</div>
+          <div>Stable Cue: {voiceTelemetry.lastRequested || 'None'}</div>
           <div>Last Transition: {diagnosticData.lastTransition || 'None'}</div>
           {diagnosticData.lastRejection && <div style={{ color: '#f00' }}>Last Rejection: {diagnosticData.lastRejection}</div>}
 
@@ -604,7 +612,7 @@ export default function CoachScreen({
               if (!next && speechSupported) {
                 voiceControllerRef.current?.cancel('voice-off', 'toggle-button');
               } else if (next && speechSupported) {
-                voiceControllerRef.current?.speak('Voice coach on.', { enabled: true, force: true });
+                voiceControllerRef.current?.directTestSpeak('Voice coach on.');
               }
             }}
             type="button"
