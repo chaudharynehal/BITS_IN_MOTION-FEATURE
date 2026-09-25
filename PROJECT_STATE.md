@@ -1,4 +1,16 @@
 # BITS in Motion — Current Project State
+## Logo asset update — supplied SVG (26 September 2026)
+
+- **Scope:** replaced app logo references with the supplied `public/logo.svg` in the app header, welcome screen, launch screen, coach and self-guided views, favicon, manifest, and service-worker app shell. Updated logo image fitting to `contain` and aligned browser theme colors to the navy brand token.
+- **Verification:** `git diff --check` passed. Production build not run because local Vite dependencies are unavailable.
+- **Deployment:** not deployed.
+
+## Theme refresh — #103783 and #9bafd9 (26 September 2026)
+
+- **Scope:** updated the shared brand tokens and application shell, homepage, onboarding accents, dashboard and progress surfaces to the requested navy/periwinkle palette. Kept neutral text and distinct success/warning/error colors for readability and meaning.
+- **Files:** `src/styles/global.css`, `src/styles/homepage.css`, `src/styles/experience.css`.
+- **Verification:** `git diff --check` passed. `npm run build` could not run because this checkout has no installed local Vite binary. Tests not run.
+- **Deployment:** not deployed.
 
 ## In progress — Emergent experience pass (branch `agent/emergent-experience-v2`, 23 September 2026)
 

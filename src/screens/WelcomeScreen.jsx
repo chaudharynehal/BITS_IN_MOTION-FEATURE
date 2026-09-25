@@ -114,7 +114,7 @@ export default function WelcomeScreen({
             window.scrollTo({ top: 0, behavior: scrollBehavior() })
           }
         >
-          <img src="/logo.png" alt="" width="42" height="42" />
+          <img src="/logo.svg" alt="" width="42" height="42" />
           <span>
             BITS <small>in Motion</small>
           </span>
@@ -374,14 +374,14 @@ export default function WelcomeScreen({
             <Dumbbell size={23} />
             <div className="home-space-graphic" aria-hidden="true">
               <svg viewBox="0 0 300 150">
-                <path d="M42 92L158 30L270 84L155 144Z" fill="#d6ddd2" />
-                <path d="M42 92V40L158 0V30Z" fill="#e9eee5" />
-                <path d="M158 0L270 47V84L158 30Z" fill="#dfe7d9" />
-                <path d="M90 92L170 48L228 76L148 122Z" fill="#669386" />
+                <path d="M42 92L158 30L270 84L155 144Z" fill="#d9e1ef" />
+                <path d="M42 92V40L158 0V30Z" fill="#edf1f9" />
+                <path d="M158 0L270 47V84L158 30Z" fill="#e8edf6" />
+                <path d="M90 92L170 48L228 76L148 122Z" fill="#9bafd9" />
                 <path
                   d="M105 92L170 57L213 77"
                   fill="none"
-                  stroke="#bad0c2"
+                  stroke="#c3cfe5"
                   strokeWidth="2"
                 />
                 <path

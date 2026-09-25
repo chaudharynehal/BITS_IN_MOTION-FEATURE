@@ -112,7 +112,7 @@ export default function SelfGuidedScreen({
             <ArrowLeft size={21} />
           </button>
           <button className="coach-home-button" type="button" onClick={onHome} aria-label="Go to BITS in Motion homepage">
-            <img src="/logo.png" alt="" />
+            <img src="/logo.svg" alt="" />
             <span>Home</span>
           </button>
         </div>

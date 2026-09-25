@@ -626,7 +626,7 @@ export default function CoachScreen({
       <div className="coach-topbar">
         <div className="coach-navigation">
           <button className="icon-button icon-button-dark" onClick={handleBack} aria-label="Back to previous screen"><ArrowLeft size={21} /></button>
-          <button className="coach-home-button" type="button" onClick={handleHome} aria-label="Go to BITS in Motion homepage"><img src="/logo.png" alt="" /><span>Home</span></button>
+          <button className="coach-home-button" type="button" onClick={handleHome} aria-label="Go to BITS in Motion homepage"><img src="/logo.svg" alt="" /><span>Home</span></button>
         </div>
         <div>
           <span className="eyebrow light">
