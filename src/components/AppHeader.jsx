@@ -15,7 +15,7 @@ export default function AppHeader({ screen, showPrimaryNavigation = true, onBack
       <div className="app-header-start">
         <button className="icon-button app-back-button" type="button" onClick={onBack} aria-label="Go back"><ArrowLeft size={20} /></button>
         <button className="brand-button" type="button" onClick={onHome} aria-label="Go to BITS in Motion homepage">
-          <img src="/logo.png" alt="" />
+          <img src="/logo.svg" alt="" />
           <span>BITS <small>in Motion</small></span>
         </button>
       </div>

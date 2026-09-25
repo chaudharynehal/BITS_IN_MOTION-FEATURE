@@ -9,7 +9,7 @@ export default function LaunchScreen() {
         <span className="launch-node node-three" />
         <ScanLine size={30} />
       </div>
-      <img src="/logo.png" alt="" />
+      <img src="/logo.svg" alt="" />
       <span className="launch-kicker"><Activity size={15} /> Smart India Hackathon 2026</span>
       <h1>BITS <em>in Motion</em></h1>
       <p>Plan smart. Move well. Build momentum.</p>
