@@ -1,4 +1,15 @@
 # BITS in Motion — Current Project State
+## Temporary food photo scan and meal estimate (26 September 2026)
+
+- **Scope:** added an in-app meal photo scan flow using the supplied team JSON. The feature keeps the photo, detected foods, serving edits, and calculated totals in screen memory only; there is no meal persistence, local storage, database schema change, or meal API write.
+- **User flow:** dashboard quick start opens the Meal Photo Scan screen. Users can take/select a JPEG, PNG, or WebP image (3 MB limit), request recognition, review confidence, remove results, change serving grams (5–1500 g), manually add foods, and see calorie ranges and protein totals. Leaving the screen unmounts it and revokes the preview URL.
+- **Data and estimates:** `src/data/foodFeatureData.json` contains the provided JSON. Nutrition uses the supplied per-100 g values and uncertainty formula; each food cites its listed source. The disclaimer says these are estimates and should be confirmed.
+- **Recognition integration:** `server/handler.js` adds a no-store `food-detect` proxy. Configure `FOOD_DETECTION_ENDPOINT` (and optional `FOOD_DETECTION_TOKEN`) in `.env.local` and deployment settings. The endpoint accepts raw image bytes with the MIME type and returns `{ "predictions": [{ "label": "rice", "confidence": 0.91 }] }`. The proxy filters below 0.4 confidence, limits 12 predictions, clears the decoded image buffer, uses HTTPS (localhost allowed for development), and does not require a database or account session. With no endpoint configured, manual food entry remains available.
+- **Privacy copy:** trust content distinguishes the local Camera Coach stream from the optional meal-photo request. The configured provider must be verified not to retain images or request logs before enabling recognition.
+- **Files:** `.env.example`, `server/handler.js`, `src/App.jsx`, `src/data/foodFeatureData.json`, `src/data/trustContent.js`, `src/screens/DashboardScreen.jsx`, new `src/screens/MealScanScreen.jsx`, `src/services/api.js`, `src/styles/experience.css`, `src/utils/navigation.js`, `src/screens/HowItWorksScreen.jsx`.
+- **Verification:** `npm run build` passed (Vite production build); `git diff --check` passed. Tests not run.
+- **Known limitation / next step:** supplied `best.pt` is a PyTorch model and is not executed directly by this Vite/Vercel app. A compatible inference endpoint must be deployed, mapped to the JSON label names, and configured before photo detection works. Validate provider no-retention behavior and food/nutrition labels before enabling in production. No live endpoint or production deployment was configured or verified.
+
 ## Logo asset update — supplied SVG (26 September 2026)
 
 - **Scope:** replaced app logo references with the supplied `public/logo.svg` in the app header, welcome screen, launch screen, coach and self-guided views, favicon, manifest, and service-worker app shell. Updated logo image fitting to `contain` and aligned browser theme colors to the navy brand token.

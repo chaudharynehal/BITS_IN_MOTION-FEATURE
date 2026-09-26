@@ -1,4 +1,4 @@
-export const TRUST_PUBLICATION_DATE = '24 September 2026';
+export const TRUST_PUBLICATION_DATE = '26 September 2026';
 
 export const PRIVACY_SECTIONS = [
   {
@@ -13,11 +13,12 @@ export const PRIVACY_SECTIONS = [
     tone: 'camera',
     paragraphs: [
       'The Camera Coach uses Google MediaPipe inside your web browser. Camera frames are analysed in temporary device memory to estimate body landmarks, count supported movements, and show observable form cues.',
+      'The separate Meal Photo Scan feature, when enabled, sends one selected still image to the food-recognition endpoint configured by the project deployment. BITS in Motion does not save the image or meal estimate. The deployment team must use a recognition provider configured not to retain images or request logs before enabling this feature.',
     ],
     bullets: [
       'Video and images are not uploaded to BITS in Motion, Neon, Google Identity Services, or another remote service.',
       'Camera frames are not recorded, saved to local storage, written to the database, or retained after processing.',
-      'No external service or third-party AI provider receives or processes your camera frames.',
+      'No external service or third-party AI provider receives or processes the live Camera Coach stream. Meal Photo Scan is a separate, optional still-photo request described above.',
       'When you stop the camera, leave the Camera Coach, or switch movements, the application stops the active camera tracks and clears the live stream from the page.',
     ],
   },
@@ -55,6 +56,7 @@ export const PRIVACY_SECTIONS = [
       { lead: 'Google account:', text: ' your account identity, fitness profile, plans, and session results are stored in a Neon PostgreSQL database and accessed through the BITS in Motion server API.' },
       { lead: 'Session access:', text: ' signed-in access uses a signed, HttpOnly session cookie. A successful sign-out clears that cookie in the current browser.' },
       { lead: 'Camera Coach:', text: ' camera pixels remain in temporary browser memory and are not part of either storage path.' },
+      { lead: 'Meal Photo Scan:', text: ' selected photos and calculated meal nutrition are temporary in the app and are cleared when you leave the scan. If enabled, the photo is sent to the project-configured recognition endpoint for processing; the deployment must confirm that provider does not retain photos or request logs.' },
       { lead: 'Voice Coach:', text: ' the optional on/off preference is stored in this browser. Spoken cues use the browser or device speech-synthesis feature; BITS in Motion does not capture microphone audio or send voice input to its server.' },
     ],
   },
@@ -68,6 +70,7 @@ export const PRIVACY_SECTIONS = [
       { lead: 'Neon:', text: ' hosts the PostgreSQL database used for signed-in profiles, plans, and workout results.' },
       { lead: 'Vercel:', text: ' hosts the web application and its server-side API.' },
       { lead: 'Google MediaPipe:', text: ' supplies the pose model used locally in your browser; it does not receive your camera stream.' },
+      { lead: 'Food recognition provider:', text: ' receives a selected meal photo only when the Meal Photo Scan is configured. Its handling must be reviewed by the deployment team before the feature is enabled.' },
       { lead: 'Google Fonts:', text: ' supplies the Manrope and Space Grotesk web fonts used by the interface.' },
     ],
     note: 'The application does not include advertising networks, marketing analytics SDKs, third-party behavioural tracking, or session-recording tools.',
@@ -89,6 +92,7 @@ export const PRIVACY_SECTIONS = [
       { lead: 'Guest data:', text: ' remains in the browser until it is removed. Clearing your browser data or cache will permanently delete this information.' },
       { lead: 'Signed-in data:', text: ' is retained to provide account sync, saved plans, and progress history. The application does not currently provide a self-service account export or deletion control.' },
       { lead: 'Camera data:', text: ' is not retained. Preview and live camera frames are discarded as they are processed, and the stream is released when camera use ends.' },
+      { lead: 'Meal scan data:', text: ' is not written to browser storage or the BITS in Motion database. The configured recognition provider must be verified not to retain uploaded photos or request logs.' },
     ],
   },
   {

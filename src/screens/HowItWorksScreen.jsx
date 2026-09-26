@@ -179,7 +179,7 @@ export default function HowItWorksScreen({ onNavigate, onStartCoach, appActive, 
         <div>
           <h3>Privacy-First AI Guarantee</h3>
           <p>
-            Unlike conventional fitness apps that upload video to cloud servers for processing, BITS in Motion runs lightweight Google MediaPipe WASM models <strong>100% on your device</strong>. Your camera stream never leaves your browser’s temporary memory.
+            The Camera Coach runs Google MediaPipe on your device; its live stream stays in temporary browser memory. Meal Photo Scan is separate: when enabled, one still image is sent to the configured food-recognition service for that request and is not saved by BITS in Motion.
           </p>
           <div className="privacy-box-links">
             <button

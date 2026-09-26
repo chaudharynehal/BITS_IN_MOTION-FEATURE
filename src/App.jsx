@@ -15,6 +15,7 @@ import HowItWorksScreen from './screens/HowItWorksScreen';
 import TermsScreen from './screens/TermsScreen';
 import PrivacyScreen from './screens/PrivacyScreen';
 import HealthDisclaimerScreen from './screens/HealthDisclaimerScreen';
+import MealScanScreen from './screens/MealScanScreen';
 import SelfGuidedScreen from './screens/SelfGuidedScreen';
 import { api } from './services/api';
 import { estimateCalories, getExerciseMet } from './utils/calories';
@@ -1059,6 +1060,7 @@ export default function App() {
       {screen === 'health-disclaimer' && <HealthDisclaimerScreen onNavigate={handleNavigate} appActive={appActive} hasProfile={hasProfile} />}
       {screen === 'dashboard' && <DashboardScreen displayName={displayName} profile={profile} plan={plan} planState={planState} sessions={sessions} sessionSummary={sessionSummary} progressState={progressState} onRetryProgress={refreshSessions} onRetryPlan={handleRetryPlan} persistenceMode={persistenceMode} onNavigate={handleNavigate} onStartCoach={handleStartCoach} onStartWorkout={handleStartWorkout} onCreatePlan={handleCreatePlan} />}
       {screen === 'workouts' && <WorkoutLibraryScreen onStartCoach={handleStartCoach} onStartSelfGuided={(id) => handleStartSelfGuided(id, 'workouts')} onNavigate={handleNavigate} />}
+      {screen === 'meal-scan' && <MealScanScreen onBack={goBack} />}
       {screen === 'profile' && <ProfileScreen key={auth.status + '-' + (hasProfile ? 'edit' : 'new')} initialProfile={profileDraft || profile} signedIn={signedIn} demoMode={demoMode} accountName={auth.user?.name} hasExistingProfile={hasProfile} onDraftChange={setProfileDraft} onSubmit={handleProfileSubmit} onBack={() => appActive && hasProfile ? navigate('dashboard') : goBack()} />}
       {screen === 'plan' && <PlanScreen profile={profile} plan={plan} sessions={sessions} progressState={progressState} onRetryProgress={refreshSessions} planState={planState} planErrorAction={planErrorAction} onRetryPlan={handleRetryPlan} onStartCoach={handleStartCoach} onStartSelfGuided={handleStartSelfGuided} onStartWorkout={handleStartWorkout} onResumeWorkout={handleContinueWorkout} activeWorkout={activeWorkout} onCreatePlan={handleCreatePlan} onExplore={() => navigate('dashboard')} onBack={() => navigate('dashboard')} />}
       {screen === 'coach' && <Suspense fallback={<main className="screen-page"><p role="status">Loading your camera coach…</p><button className="button button-quiet" onClick={handleCoachBack}>Back</button></main>}><CoachScreen exerciseId={activeExerciseId} activeWorkout={currentWorkoutMovementFor(activeExerciseId)} onBack={handleCoachBack} onHome={goHome} onEndSession={handleEndSession} onSkip={handleSkipMovement} /></Suspense>}

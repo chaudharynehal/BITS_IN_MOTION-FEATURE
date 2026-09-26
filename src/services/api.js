@@ -16,6 +16,7 @@ async function request(action, options = {}) {
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
       signal: controller.signal,
+      cache: 'no-store',
     });
     payload = await response.json();
   } catch (error) {
@@ -45,5 +46,13 @@ export const api = {
   sessions: (query) => request('sessions', { query }),
   sessionsSummary: () => request('sessions-summary'),
   saveSession: (session) => request('sessions', { method: 'POST', body: session }),
+  detectFoodPhoto: async (file) => {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    }
+    return request('food-detect', { method: 'POST', body: { mimeType: file.type, imageBase64: btoa(binary) } });
+  },
   leaderboard: (period = 'week') => request('leaderboard', { query: { period } }),
 };
