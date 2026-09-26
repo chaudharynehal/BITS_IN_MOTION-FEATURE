@@ -1,6 +1,7 @@
 export const APP_SCREENS = new Set([
   'dashboard',
   'workouts',
+  'meal-scan',
   'plan',
   'coach',
   'self-guided',

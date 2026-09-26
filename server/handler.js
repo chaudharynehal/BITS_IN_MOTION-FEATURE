@@ -8,6 +8,8 @@ import { getCircuitRounds, prescriptionFromLabel } from '../shared/recommendatio
 
 const googleClient = new OAuth2Client();
 const MAX_JSON_BYTES = 32 * 1024;
+// Keep base64 JSON requests below typical serverless request-body limits.
+const MAX_FOOD_IMAGE_BYTES = 3 * 1024 * 1024;
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROFILE_OPTIONS = {
@@ -42,14 +44,14 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-async function readJson(req) {
+async function readJson(req, maximumBytes = MAX_JSON_BYTES) {
   if (isPlainObject(req.body)) {
-    if (Buffer.byteLength(JSON.stringify(req.body)) > MAX_JSON_BYTES) throw new RequestError(413, 'Request body is too large.', 'BODY_TOO_LARGE');
+    if (Buffer.byteLength(JSON.stringify(req.body)) > maximumBytes) throw new RequestError(413, 'Request body is too large.', 'BODY_TOO_LARGE');
     return req.body;
   }
 
   if (typeof req.body === 'string') {
-    if (Buffer.byteLength(req.body) > MAX_JSON_BYTES) throw new RequestError(413, 'Request body is too large.', 'BODY_TOO_LARGE');
+    if (Buffer.byteLength(req.body) > maximumBytes) throw new RequestError(413, 'Request body is too large.', 'BODY_TOO_LARGE');
     try {
       const parsed = JSON.parse(req.body || '{}');
       if (!isPlainObject(parsed)) throw new Error('Body must be an object.');
@@ -63,7 +65,7 @@ async function readJson(req) {
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_JSON_BYTES) throw new RequestError(413, 'Request body is too large.', 'BODY_TOO_LARGE');
+    if (size > maximumBytes) throw new RequestError(413, 'Request body is too large.', 'BODY_TOO_LARGE');
     chunks.push(chunk);
   }
 
@@ -73,6 +75,53 @@ async function readJson(req) {
     return parsed;
   } catch {
     throw new RequestError(400, 'Request body must be valid JSON.', 'INVALID_JSON');
+  }
+}
+
+async function handleFoodDetection(req, res) {
+  if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
+  const endpoint = process.env.FOOD_DETECTION_ENDPOINT;
+  if (!endpoint) return send(res, 503, { error: 'Food photo detection is not configured yet. You can still add foods manually.', code: 'FOOD_DETECTION_NOT_CONFIGURED' });
+
+  const body = await readJson(req, Math.ceil(MAX_FOOD_IMAGE_BYTES * 1.4));
+  const mimeType = String(body.mimeType || '').toLowerCase();
+  const imageBase64 = String(body.imageBase64 || '');
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType) || !/^[A-Za-z0-9+/]*={0,2}$/.test(imageBase64)) {
+    throw new RequestError(400, 'Choose a JPEG, PNG, or WebP image.', 'INVALID_IMAGE');
+  }
+  const image = Buffer.from(imageBase64, 'base64');
+  if (!image.length || image.length > MAX_FOOD_IMAGE_BYTES) {
+    image.fill(0);
+    throw new RequestError(413, 'Image must be smaller than 3 MB.', 'IMAGE_TOO_LARGE');
+  }
+
+  let target;
+  try { target = new URL(endpoint); } catch { throw new Error('FOOD_DETECTION_CONFIGURATION_INVALID'); }
+  if (target.protocol !== 'https:' && target.hostname !== 'localhost' && target.hostname !== '127.0.0.1') throw new Error('FOOD_DETECTION_CONFIGURATION_INVALID');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const upstream = await fetch(target, {
+      method: 'POST',
+      headers: { 'Content-Type': mimeType, 'Cache-Control': 'no-store', ...(process.env.FOOD_DETECTION_TOKEN ? { Authorization: `Bearer ${process.env.FOOD_DETECTION_TOKEN}` } : {}) },
+      body: image,
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    if (!upstream.ok) return send(res, 502, { error: 'The food recognition service could not process this photo.', code: 'FOOD_DETECTION_FAILED' });
+    const payload = await upstream.json();
+    const predictions = Array.isArray(payload) ? payload : payload.predictions;
+    if (!Array.isArray(predictions)) return send(res, 502, { error: 'The recognition service returned an unsupported response.', code: 'FOOD_DETECTION_RESPONSE_INVALID' });
+    return send(res, 200, { predictions: predictions.slice(0, 12).map((item) => ({
+      label: String(item.label ?? item.class ?? item.name ?? ''),
+      confidence: Number(item.confidence ?? item.score ?? 0),
+    })).filter((item) => item.label && Number.isFinite(item.confidence) && item.confidence >= 0.4 && item.confidence <= 1) });
+  } catch (error) {
+    if (error instanceof RequestError) throw error;
+    return send(res, 502, { error: controller.signal.aborted ? 'Food recognition took too long. Try again.' : 'Food recognition is temporarily unavailable.', code: 'FOOD_DETECTION_FAILED' });
+  } finally {
+    clearTimeout(timer);
+    image.fill(0);
   }
 }
 
@@ -608,6 +657,10 @@ export async function handleApiRequest(req, res) {
   try {
     if (req.method === 'OPTIONS') return send(res, 204, {});
     const action = actionFor(req);
+    if (action === 'food-detect') {
+      validateMutationRequest(req);
+      return await handleFoodDetection(req, res);
+    }
     if (action === 'status') {
       if (req.method !== 'GET') return methodNotAllowed(res, ['GET']);
       return send(res, 200, {

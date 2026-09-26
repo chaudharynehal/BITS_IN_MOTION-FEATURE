@@ -1,0 +1,1129 @@
+{
+  "package": {
+    "name": "BITS in Motion team data",
+    "version": "2026.09.1",
+    "purpose": "Single-file hand-off for the final Emergent application. This is catalogue and rules data only; it contains no user records, credentials, photos or videos."
+  },
+  "foodDetection": {
+    "model": {
+      "id": "indian-food-yolov8n-14",
+      "name": "Indian Food YOLOv8n detector",
+      "version": "upstream-main-2026-09",
+      "task": "object-detection",
+      "inputSize": 640,
+      "sourceUrl": "https://github.com/mano-glitch-ai/Indian-Food-Object-Detection",
+      "weightsUrl": "https://huggingface.co/Hiren2386/yolov8-Indian-food-detection/blob/main/best.pt",
+      "modelLicence": "MIT (as declared by the weights repository)",
+      "frameworkLicenceNote": "Check the Ultralytics licence for the chosen deployment before distribution.",
+      "reportedMetrics": {
+        "precision": 0.716,
+        "recall": 0.716,
+        "map50": 0.734,
+        "map50To95": 0.472
+      },
+      "rawFramesStored": false
+    },
+    "labels": [
+      {
+        "index": 0,
+        "key": "biryani",
+        "displayName": "Biryani",
+        "defaultFoodId": "biryani",
+        "alternatives": [
+          "biryani"
+        ]
+      },
+      {
+        "index": 1,
+        "key": "rice",
+        "displayName": "Rice",
+        "defaultFoodId": "steamed-rice",
+        "alternatives": [
+          "steamed-rice",
+          "biryani"
+        ]
+      },
+      {
+        "index": 2,
+        "key": "roti",
+        "displayName": "Roti",
+        "defaultFoodId": "chapati",
+        "alternatives": [
+          "chapati",
+          "naan"
+        ]
+      },
+      {
+        "index": 3,
+        "key": "poori",
+        "displayName": "Poori",
+        "defaultFoodId": "poori",
+        "alternatives": [
+          "poori",
+          "bhatura"
+        ]
+      },
+      {
+        "index": 4,
+        "key": "idli",
+        "displayName": "Idli",
+        "defaultFoodId": "idli",
+        "alternatives": [
+          "idli"
+        ]
+      },
+      {
+        "index": 5,
+        "key": "vada",
+        "displayName": "Vada",
+        "defaultFoodId": "vada",
+        "alternatives": [
+          "vada"
+        ]
+      },
+      {
+        "index": 6,
+        "key": "sambar",
+        "displayName": "Sambar",
+        "defaultFoodId": "sambar",
+        "alternatives": [
+          "sambar",
+          "dal-tadka"
+        ]
+      },
+      {
+        "index": 7,
+        "key": "chutney",
+        "displayName": "Chutney",
+        "defaultFoodId": "chutney",
+        "alternatives": [
+          "chutney"
+        ]
+      },
+      {
+        "index": 8,
+        "key": "dal",
+        "displayName": "Dal",
+        "defaultFoodId": "dal-tadka",
+        "alternatives": [
+          "dal-tadka",
+          "dal-makhani",
+          "rajma"
+        ]
+      },
+      {
+        "index": 9,
+        "key": "dry-curry",
+        "displayName": "Dry curry",
+        "defaultFoodId": "bhindi-masala",
+        "alternatives": [
+          "bhindi-masala",
+          "dum-aloo"
+        ]
+      },
+      {
+        "index": 10,
+        "key": "wet-curry",
+        "displayName": "Wet curry",
+        "defaultFoodId": "kadai-paneer",
+        "alternatives": [
+          "kadai-paneer",
+          "paneer-butter-masala",
+          "palak-paneer",
+          "butter-chicken",
+          "chana-masala",
+          "rajma"
+        ]
+      },
+      {
+        "index": 11,
+        "key": "salad",
+        "displayName": "Salad",
+        "defaultFoodId": "kachumber-salad",
+        "alternatives": [
+          "kachumber-salad"
+        ]
+      },
+      {
+        "index": 12,
+        "key": "sweet",
+        "displayName": "Indian sweet",
+        "defaultFoodId": "gulab-jamun",
+        "alternatives": [
+          "gulab-jamun",
+          "jalebi",
+          "kheer",
+          "rasgulla",
+          "ras-malai",
+          "gajar-ka-halwa",
+          "modak"
+        ]
+      },
+      {
+        "index": 13,
+        "key": "curd",
+        "displayName": "Curd",
+        "defaultFoodId": "plain-curd",
+        "alternatives": [
+          "plain-curd"
+        ]
+      }
+    ],
+    "foods": [
+      {
+        "id": "biryani",
+        "name": "Biryani",
+        "aliases": [
+          "biriyani"
+        ],
+        "diet": "non-vegetarian",
+        "caloriesPer100g": 198,
+        "proteinPer100g": 14,
+        "defaultServingGrams": 300,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "dal-tadka",
+        "name": "Dal tadka",
+        "aliases": [
+          "daal",
+          "dal fry"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 116,
+        "proteinPer100g": 9,
+        "defaultServingGrams": 180,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "dal-makhani",
+        "name": "Dal makhani",
+        "aliases": [
+          "black dal"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 130,
+        "proteinPer100g": 8,
+        "defaultServingGrams": 180,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "palak-paneer",
+        "name": "Palak paneer",
+        "aliases": [
+          "saag paneer"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 120,
+        "proteinPer100g": 8,
+        "defaultServingGrams": 180,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "paneer-butter-masala",
+        "name": "Paneer butter masala",
+        "aliases": [
+          "butter paneer"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 180,
+        "proteinPer100g": 10,
+        "defaultServingGrams": 180,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "butter-chicken",
+        "name": "Butter chicken",
+        "aliases": [
+          "murgh makhani"
+        ],
+        "diet": "non-vegetarian",
+        "caloriesPer100g": 150,
+        "proteinPer100g": 16,
+        "defaultServingGrams": 180,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "chana-masala",
+        "name": "Chana masala",
+        "aliases": [
+          "chole"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 140,
+        "proteinPer100g": 9,
+        "defaultServingGrams": 180,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "dum-aloo",
+        "name": "Dum aloo",
+        "aliases": [
+          "aloo curry"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 130,
+        "proteinPer100g": 3,
+        "defaultServingGrams": 180,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "aloo-tikki",
+        "name": "Aloo tikki",
+        "aliases": [
+          "potato tikki"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 150,
+        "proteinPer100g": 3,
+        "defaultServingGrams": 100,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "poha",
+        "name": "Poha",
+        "aliases": [
+          "flattened rice"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 130,
+        "proteinPer100g": 3,
+        "defaultServingGrams": 200,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "naan",
+        "name": "Naan",
+        "aliases": [
+          "butter naan"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 310,
+        "proteinPer100g": 9,
+        "defaultServingGrams": 90,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "chapati",
+        "name": "Chapati / roti",
+        "aliases": [
+          "roti",
+          "phulka"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 264,
+        "proteinPer100g": 8,
+        "defaultServingGrams": 40,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "dosa",
+        "name": "Dosa",
+        "aliases": [
+          "plain dosa"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 168,
+        "proteinPer100g": 4,
+        "defaultServingGrams": 120,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "idli",
+        "name": "Idli",
+        "aliases": [
+          "idly"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 58,
+        "proteinPer100g": 3,
+        "defaultServingGrams": 80,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "samosa",
+        "name": "Samosa",
+        "aliases": [
+          "samosa pav"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 262,
+        "proteinPer100g": 6,
+        "defaultServingGrams": 100,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "pani-puri",
+        "name": "Pani puri",
+        "aliases": [
+          "golgappa",
+          "puchka"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 180,
+        "proteinPer100g": 3,
+        "defaultServingGrams": 120,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "pav-bhaji",
+        "name": "Pav bhaji",
+        "aliases": [
+          "bhaji pav"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 150,
+        "proteinPer100g": 4,
+        "defaultServingGrams": 300,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "dhokla",
+        "name": "Dhokla",
+        "aliases": [
+          "khaman"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 160,
+        "proteinPer100g": 5,
+        "defaultServingGrams": 120,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "jalebi",
+        "name": "Jalebi",
+        "aliases": [
+          "jilebi"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 380,
+        "proteinPer100g": 2,
+        "defaultServingGrams": 50,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "gulab-jamun",
+        "name": "Gulab jamun",
+        "aliases": [
+          "gulab jamun"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 340,
+        "proteinPer100g": 4,
+        "defaultServingGrams": 50,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "kheer",
+        "name": "Kheer",
+        "aliases": [
+          "payasam",
+          "rice pudding"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 180,
+        "proteinPer100g": 5,
+        "defaultServingGrams": 150,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "rasgulla",
+        "name": "Rasgulla",
+        "aliases": [
+          "rosogolla"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 186,
+        "proteinPer100g": 5,
+        "defaultServingGrams": 100,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "ras-malai",
+        "name": "Ras malai",
+        "aliases": [
+          "rasmalai"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 195,
+        "proteinPer100g": 6,
+        "defaultServingGrams": 120,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "kachori",
+        "name": "Kachori",
+        "aliases": [
+          "kachauri"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 280,
+        "proteinPer100g": 5,
+        "defaultServingGrams": 80,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "bhindi-masala",
+        "name": "Bhindi masala",
+        "aliases": [
+          "okra sabzi",
+          "bhindi sabzi"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 90,
+        "proteinPer100g": 3,
+        "defaultServingGrams": 160,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "gajar-ka-halwa",
+        "name": "Gajar ka halwa",
+        "aliases": [
+          "carrot halwa"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 250,
+        "proteinPer100g": 4,
+        "defaultServingGrams": 100,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "modak",
+        "name": "Modak",
+        "aliases": [
+          "ukadiche modak"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 170,
+        "proteinPer100g": 3,
+        "defaultServingGrams": 80,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "vada",
+        "name": "Vada",
+        "aliases": [
+          "medu vada",
+          "wada"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 220,
+        "proteinPer100g": 6,
+        "defaultServingGrams": 80,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "kadai-paneer",
+        "name": "Kadai paneer",
+        "aliases": [
+          "karahi paneer"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 175,
+        "proteinPer100g": 11,
+        "defaultServingGrams": 180,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "rajma",
+        "name": "Rajma",
+        "aliases": [
+          "kidney bean curry"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 144,
+        "proteinPer100g": 9,
+        "defaultServingGrams": 180,
+        "uncertainty": 0.2,
+        "sourceId": "nutrilens",
+        "verificationStatus": "secondary-source"
+      },
+      {
+        "id": "steamed-rice",
+        "name": "Steamed rice",
+        "aliases": [
+          "cooked rice",
+          "white rice"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 130,
+        "proteinPer100g": 2.7,
+        "defaultServingGrams": 180,
+        "uncertainty": 0.3,
+        "sourceId": "prototype",
+        "verificationStatus": "prototype-estimate"
+      },
+      {
+        "id": "poori",
+        "name": "Poori",
+        "aliases": [
+          "puri"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 330,
+        "proteinPer100g": 6,
+        "defaultServingGrams": 80,
+        "uncertainty": 0.3,
+        "sourceId": "prototype",
+        "verificationStatus": "prototype-estimate"
+      },
+      {
+        "id": "bhatura",
+        "name": "Bhatura",
+        "aliases": [
+          "bhature"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 320,
+        "proteinPer100g": 8,
+        "defaultServingGrams": 120,
+        "uncertainty": 0.3,
+        "sourceId": "prototype",
+        "verificationStatus": "prototype-estimate"
+      },
+      {
+        "id": "sambar",
+        "name": "Sambar",
+        "aliases": [
+          "sambhar"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 70,
+        "proteinPer100g": 3.5,
+        "defaultServingGrams": 180,
+        "uncertainty": 0.3,
+        "sourceId": "prototype",
+        "verificationStatus": "prototype-estimate"
+      },
+      {
+        "id": "chutney",
+        "name": "Chutney",
+        "aliases": [
+          "coconut chutney",
+          "green chutney"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 160,
+        "proteinPer100g": 3,
+        "defaultServingGrams": 30,
+        "uncertainty": 0.3,
+        "sourceId": "prototype",
+        "verificationStatus": "prototype-estimate"
+      },
+      {
+        "id": "kachumber-salad",
+        "name": "Kachumber salad",
+        "aliases": [
+          "salad",
+          "cucumber salad"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 35,
+        "proteinPer100g": 1,
+        "defaultServingGrams": 120,
+        "uncertainty": 0.3,
+        "sourceId": "prototype",
+        "verificationStatus": "prototype-estimate"
+      },
+      {
+        "id": "plain-curd",
+        "name": "Plain curd",
+        "aliases": [
+          "dahi",
+          "yogurt",
+          "raita"
+        ],
+        "diet": "vegetarian",
+        "caloriesPer100g": 61,
+        "proteinPer100g": 3.5,
+        "defaultServingGrams": 100,
+        "uncertainty": 0.3,
+        "sourceId": "prototype",
+        "verificationStatus": "prototype-estimate"
+      }
+    ],
+    "sources": [
+      {
+        "id": "nutrilens",
+        "name": "NutriLens IndianFoodDB-30 nutrition table",
+        "url": "https://github.com/bhatt-aditya03/NutriLens",
+        "licence": "MIT",
+        "note": "Calories and protein per 100 g are reproduced from the project README. The project states that its values were averaged from IFCT 2017 and USDA FoodData Central."
+      },
+      {
+        "id": "prototype",
+        "name": "BITS in Motion prototype estimate",
+        "url": "",
+        "licence": "Project data",
+        "note": "A deliberately broad fallback for a detector category. Replace with a verified recipe or food-composition record before health or research use."
+      }
+    ],
+    "thresholds": {
+      "minimumConfidence": 0.4,
+      "maximumDetections": 12,
+      "nmsIouThreshold": 0.45,
+      "minimumServingGrams": 5,
+      "maximumServingGrams": 1500
+    },
+    "inputContract": {
+      "description": "The local model returns one object per detected food region.",
+      "fields": {
+        "classIndex": "Integer from 0 to 13 matching labels[index].",
+        "confidence": "Number from 0 to 1.",
+        "boundingBox": "{ x, y, width, height } in image pixels."
+      }
+    },
+    "requiredFlow": [
+      "Process the photo locally on the device.",
+      "Remove predictions below minimumConfidence.",
+      "Suppress overlapping predictions of the same class at nmsIouThreshold.",
+      "Show the suggested food and alternatives to the user.",
+      "Require the user to confirm the food and serving grams.",
+      "Calculate calories and protein from the confirmed food record.",
+      "Save only numerical results; never save the photo."
+    ],
+    "nutritionFormula": {
+      "calories": "caloriesPer100g * servingGrams / 100",
+      "proteinGrams": "proteinPer100g * servingGrams / 100",
+      "calorieRangeLow": "calories * (1 - uncertainty)",
+      "calorieRangeHigh": "calories * (1 + uncertainty)"
+    },
+    "disclaimer": "Food recognition and nutrition values are estimates. Confirm the dish and serving size; recipes, oil and portions can change the result substantially. This is general guidance, not medical or dietary treatment."
+  },
+  "exerciseDetection": {
+    "rulesVersion": "2026.09.1",
+    "exercises": [
+      {
+        "id": "warmup",
+        "name": "Mobility warm-up",
+        "category": "Warm-up",
+        "target": "3 min",
+        "instruction": "March in place, roll your shoulders, then open the hips gently.",
+        "icon": "activity",
+        "cameraSupported": false,
+        "detectionType": null,
+        "met": 2.8,
+        "primaryMuscles": [
+          "Shoulders",
+          "Hips"
+        ],
+        "secondaryMuscles": [],
+        "goalTags": [
+          "stay-fit"
+        ],
+        "minimumLevel": "Beginner",
+        "equipment": "None"
+      },
+      {
+        "id": "squats",
+        "name": "Bodyweight squats",
+        "category": "Lower body",
+        "target": "3 × 8 reps",
+        "instruction": "Stand tall, sit the hips back, reach a comfortable depth, then stand.",
+        "icon": "scan",
+        "cameraSupported": true,
+        "detectionType": "squat",
+        "met": 5,
+        "primaryMuscles": [
+          "Quadriceps",
+          "Glutes"
+        ],
+        "secondaryMuscles": [
+          "Hamstrings",
+          "Core"
+        ],
+        "goalTags": [
+          "stay-fit",
+          "strength",
+          "weight-management"
+        ],
+        "minimumLevel": "Beginner",
+        "equipment": "None"
+      },
+      {
+        "id": "jumping-jacks",
+        "name": "Jumping jacks",
+        "category": "Cardio",
+        "target": "3 × 30 sec",
+        "instruction": "Move from feet-together and arms-down to feet-apart and hands overhead.",
+        "icon": "zap",
+        "cameraSupported": true,
+        "detectionType": "jumping-jack",
+        "met": 8,
+        "primaryMuscles": [
+          "Calves",
+          "Shoulders"
+        ],
+        "secondaryMuscles": [
+          "Glutes",
+          "Cardiovascular system"
+        ],
+        "goalTags": [
+          "stay-fit",
+          "weight-management"
+        ],
+        "minimumLevel": "Beginner",
+        "equipment": "None"
+      },
+      {
+        "id": "pushups",
+        "name": "Incline or knee push-ups",
+        "category": "Upper body",
+        "target": "3 × 6 reps",
+        "instruction": "Use a stable desk edge or your knees; keep a straight line through the torso.",
+        "icon": "move",
+        "cameraSupported": true,
+        "detectionType": "pushup",
+        "met": 3.8,
+        "primaryMuscles": [
+          "Chest",
+          "Triceps"
+        ],
+        "secondaryMuscles": [
+          "Shoulders",
+          "Core"
+        ],
+        "goalTags": [
+          "stay-fit",
+          "strength"
+        ],
+        "minimumLevel": "Beginner",
+        "equipment": "None"
+      },
+      {
+        "id": "crunches",
+        "name": "Controlled crunches",
+        "category": "Core",
+        "target": "3 × 8 reps",
+        "instruction": "Lie side-on to the camera, curl the shoulders toward the hips, then return with control.",
+        "icon": "activity",
+        "cameraSupported": true,
+        "detectionType": "crunch",
+        "met": 3.8,
+        "primaryMuscles": [
+          "Abdominals"
+        ],
+        "secondaryMuscles": [
+          "Hip flexors"
+        ],
+        "goalTags": [
+          "stay-fit",
+          "strength"
+        ],
+        "minimumLevel": "Beginner",
+        "equipment": "None"
+      },
+      {
+        "id": "plank",
+        "name": "Supported plank",
+        "category": "Core",
+        "target": "2 × 20 sec",
+        "instruction": "Brace gently and hold a straight, comfortable position. Stop if it feels painful.",
+        "icon": "timer",
+        "cameraSupported": false,
+        "detectionType": null,
+        "met": 3.5,
+        "primaryMuscles": [
+          "Core"
+        ],
+        "secondaryMuscles": [
+          "Shoulders",
+          "Glutes"
+        ],
+        "goalTags": [
+          "stay-fit",
+          "strength"
+        ],
+        "minimumLevel": "Beginner",
+        "equipment": "None"
+      },
+      {
+        "id": "cooldown",
+        "name": "Cooldown & breathing",
+        "category": "Recovery",
+        "target": "3 min",
+        "instruction": "Walk slowly, breathe evenly and stretch only within a comfortable range.",
+        "icon": "wind",
+        "cameraSupported": false,
+        "detectionType": null,
+        "met": 2.3,
+        "primaryMuscles": [
+          "Whole body"
+        ],
+        "secondaryMuscles": [],
+        "goalTags": [
+          "stay-fit",
+          "strength",
+          "weight-management"
+        ],
+        "minimumLevel": "Beginner",
+        "equipment": "None"
+      },
+      {
+        "id": "lunges",
+        "name": "Reverse lunges",
+        "category": "Lower body",
+        "target": "3 × 6 / side",
+        "instruction": "Step back under control and use a wall for support if needed.",
+        "icon": "footprints",
+        "cameraSupported": false,
+        "detectionType": null,
+        "met": 4,
+        "primaryMuscles": [
+          "Quadriceps",
+          "Glutes"
+        ],
+        "secondaryMuscles": [
+          "Hamstrings",
+          "Core"
+        ],
+        "goalTags": [
+          "strength"
+        ],
+        "minimumLevel": "Intermediate",
+        "equipment": "None"
+      },
+      {
+        "id": "rows",
+        "name": "Backpack rows",
+        "category": "Upper body",
+        "target": "3 × 10 reps",
+        "instruction": "Use a lightly loaded backpack and pull it toward your ribs with a long spine.",
+        "icon": "briefcase",
+        "cameraSupported": false,
+        "detectionType": null,
+        "met": 3.8,
+        "primaryMuscles": [
+          "Upper back"
+        ],
+        "secondaryMuscles": [
+          "Biceps",
+          "Core"
+        ],
+        "goalTags": [
+          "strength"
+        ],
+        "minimumLevel": "Intermediate",
+        "equipment": "Backpack"
+      }
+    ],
+    "cameraRules": [
+      {
+        "exerciseId": "squats",
+        "detectorType": "angle-cycle",
+        "preferredView": "side",
+        "requiredLandmarks": [
+          "hip",
+          "knee",
+          "ankle"
+        ],
+        "minVisibility": 0.6,
+        "stableFrames": 4,
+        "stableDurationMs": 120,
+        "minRepIntervalMs": 800,
+        "startState": "standing",
+        "targetState": "down",
+        "thresholds": {
+          "standingAngle": 160,
+          "downAngle": 110,
+          "shallowCueAngle": 145
+        },
+        "rulesVersion": "2026.09.1"
+      },
+      {
+        "exerciseId": "pushups",
+        "detectorType": "angle-cycle",
+        "preferredView": "side",
+        "requiredLandmarks": [
+          "shoulder",
+          "elbow",
+          "wrist",
+          "hip",
+          "ankle"
+        ],
+        "minVisibility": 0.55,
+        "stableFrames": 4,
+        "stableDurationMs": 120,
+        "minRepIntervalMs": 700,
+        "startState": "top",
+        "targetState": "bottom",
+        "thresholds": {
+          "topElbowAngle": 155,
+          "bottomElbowAngle": 100,
+          "minimumBodyAngle": 150,
+          "lowerCueAngle": 135
+        },
+        "rulesVersion": "2026.09.1"
+      },
+      {
+        "exerciseId": "crunches",
+        "detectorType": "angle-cycle",
+        "preferredView": "side",
+        "requiredLandmarks": [
+          "shoulder",
+          "hip",
+          "knee"
+        ],
+        "minVisibility": 0.55,
+        "stableFrames": 4,
+        "stableDurationMs": 120,
+        "minRepIntervalMs": 700,
+        "startState": "extended",
+        "targetState": "curled",
+        "thresholds": {
+          "extendedTorsoAngle": 140,
+          "curledTorsoAngle": 105,
+          "curlCueAngle": 125
+        },
+        "rulesVersion": "2026.09.1"
+      },
+      {
+        "exerciseId": "jumping-jacks",
+        "detectorType": "distance-cycle",
+        "preferredView": "front",
+        "requiredLandmarks": [
+          "leftShoulder",
+          "rightShoulder",
+          "leftWrist",
+          "rightWrist",
+          "leftHip",
+          "rightHip",
+          "leftAnkle",
+          "rightAnkle"
+        ],
+        "minVisibility": 0.55,
+        "stableFrames": 4,
+        "stableDurationMs": 120,
+        "minRepIntervalMs": 500,
+        "startState": "closed",
+        "targetState": "open",
+        "thresholds": {
+          "openFeetRatio": 1.6,
+          "closedFeetRatio": 1.15
+        },
+        "rulesVersion": "2026.09.1"
+      }
+    ],
+    "landmarkIndexes": {
+      "leftShoulder": 11,
+      "rightShoulder": 12,
+      "leftElbow": 13,
+      "rightElbow": 14,
+      "leftWrist": 15,
+      "rightWrist": 16,
+      "leftHip": 23,
+      "rightHip": 24,
+      "leftKnee": 25,
+      "rightKnee": 26,
+      "leftAnkle": 27,
+      "rightAnkle": 28
+    },
+    "requiredFlow": [
+      "Run MediaPipe Pose Landmarker on each new video frame once.",
+      "Use the side with the best landmark visibility for side-view exercises.",
+      "Reject a measurement below minVisibility.",
+      "Require stableFrames and stableDurationMs before accepting a state.",
+      "Count only startState to targetState to startState.",
+      "Enforce minRepIntervalMs to prevent double counting.",
+      "Save only repetitions, duration, cues and numerical measurements."
+    ]
+  },
+  "recommendationRules": {
+    "profileInputs": [
+      "age",
+      "heightCm",
+      "weightKg",
+      "fitnessLevel",
+      "goal",
+      "availableMinutes",
+      "location",
+      "equipment",
+      "lowImpact"
+    ],
+    "rules": [
+      "Always begin with warmup and finish with cooldown.",
+      "For a 20-minute beginner no-equipment plan use squats, jumping jacks, push-ups, crunches and plank.",
+      "For longer non-beginner sessions add lunges when equipment is none, otherwise add backpack rows.",
+      "Use goalTags, minimumLevel and equipment to filter exercises."
+    ]
+  },
+  "privacy": {
+    "rawCameraFramesUploaded": false,
+    "rawMealPhotosStored": false,
+    "savedWorkoutFields": [
+      "exerciseId",
+      "reps",
+      "durationSeconds",
+      "estimatedCalories",
+      "cueCounts",
+      "movementMetrics"
+    ],
+    "savedMealFields": [
+      "foodId",
+      "detectedLabel",
+      "confidence",
+      "servingGrams",
+      "estimatedCalories",
+      "estimatedProteinGrams",
+      "calorieRange"
+    ]
+  }
+}

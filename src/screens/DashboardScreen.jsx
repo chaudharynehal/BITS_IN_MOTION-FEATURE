@@ -156,6 +156,7 @@ export default function DashboardScreen({
           <span className="eyebrow">Quick start</span>
           <button type="button" onClick={() => onStartCoach('squats')}><Camera size={19} /><span><strong>Camera Coach</strong><small>Rep counting and form cues</small></span><ChevronRight size={17} /></button>
           <button type="button" onClick={() => onNavigate('workouts')}><Dumbbell size={19} /><span><strong>Workout library</strong><small>Every supported movement</small></span><ChevronRight size={17} /></button>
+          <button type="button" onClick={() => onNavigate('meal-scan')}><Camera size={19} /><span><strong>Meal photo scan</strong><small>Temporary nutrition estimate</small></span><ChevronRight size={17} /></button>
           <button type="button" onClick={() => onNavigate('leaderboard')}><Trophy size={19} /><span><strong>Campus leaderboard</strong><small>Consistency, with privacy</small></span><ChevronRight size={17} /></button>
         </article>
 
